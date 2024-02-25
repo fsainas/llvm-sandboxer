@@ -1,0 +1,12 @@
+[package]
+name = "sandboxer"
+version = "0.1.0"
+authors = ["Franco Sainas <franco@sainas.me>"]
+edition = "2021"
+
+[dependencies]
+# Remove "prefer-dynamic" feature if not needed
+llvm-sys = { version = "170.0.1", features = ["prefer-dynamic"]}
+# Specify the main llvm version ("llvmM-0" where M is the main version).
+# Check the installed version with `llvm-config --version`
+inkwell = { version = "0.4.0", features = ["llvm17-0"] }
