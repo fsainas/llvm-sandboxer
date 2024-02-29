@@ -2,7 +2,6 @@ pub mod sandboxer {
     use inkwell::module::Module;
     use inkwell::values::FunctionValue;
     use inkwell::values::PointerValue;
-    use inkwell::values::IntValue;
     use inkwell::values::BasicValueEnum;
     use inkwell::values::InstructionOpcode::{Call, Load, Store};
 
@@ -27,15 +26,13 @@ pub mod sandboxer {
     }
 
     /// Checks if a given PointerValue is contained within a vector of protected PointerValues.
-    fn _is_address_protected(protected_ptrs: &[(PointerValue, IntValue)], ptr: &PointerValue, size: u64) -> bool {
+    fn _is_address_protected(protected_ptrs: &[(PointerValue, u64)], ptr: &PointerValue, size: u64) -> bool {
 
         for &(protected_ptr, protected_size) in protected_ptrs {
 
-            let Some(protected_size_as_u64) = protected_size.get_zero_extended_constant() else { todo!(); };
-
             println!("protected_ptr: {:?}\n", protected_ptr);
             println!("ptr: {:?}\n", ptr);
-            if protected_ptr.eq(ptr) && protected_size_as_u64 >= size {
+            if protected_ptr.eq(ptr) && protected_size >= size {
                 return true; // Found a match, return true
             }
 
@@ -50,7 +47,7 @@ pub mod sandboxer {
 
         // Keeps track of protected memory addresses
         // Pointer and size
-        let mut protected_ptrs: Vec<(PointerValue, IntValue)> = Vec::new();
+        let mut protected_ptrs: Vec<(PointerValue, u64)> = Vec::new();
 
         // Iterate over the basic blocks in the function
         for basic_block in function.get_basic_blocks() {
@@ -71,7 +68,8 @@ pub mod sandboxer {
                             instr.get_operand(1).unwrap().unwrap_left()
                             ) else { todo!(); };
 
-                        protected_ptrs.push((ptr, size));
+                        let Some(size_as_u64) = size.get_zero_extended_constant() else { todo!(); };
+                        protected_ptrs.push((ptr, size_as_u64));
                     }
 
                 }
