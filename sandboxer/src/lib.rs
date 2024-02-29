@@ -13,8 +13,8 @@ pub mod sandboxer {
         // Iterate over the basic blocks in the function
         for basic_block in function.get_basic_blocks() {
             // Iterate over the instructions in the basic block
-            let mut instr_iter = basic_block.get_instructions();
-            while let Some(instr) = instr_iter.next() {
+            let instr_iter = basic_block.get_instructions();
+            for instr in instr_iter {
                 // Check if the instruction is a call instruction
                 if instr.get_opcode() == inkwell::values::InstructionOpcode::Call {
                     // Check if it is the call to remove
@@ -56,8 +56,8 @@ pub mod sandboxer {
         for basic_block in function.get_basic_blocks() {
 
             // Iterate over the instructions in the basic block
-            let mut instr_iter = basic_block.get_instructions();
-            while let Some(instr) = instr_iter.next() {
+            let instr_iter = basic_block.get_instructions();
+            for instr in instr_iter {
 
                 // Call
                 if instr.get_opcode() == Call {

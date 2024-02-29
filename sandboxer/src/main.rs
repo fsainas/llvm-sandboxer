@@ -50,7 +50,7 @@ fn main() {
     let context = Context::create();
 
     // Parse LLVM
-    let module = Module::parse_bitcode_from_path(&path, &context).unwrap();
+    let module = Module::parse_bitcode_from_path(path, &context).unwrap();
 
     // Process LLVM
     let function = module.get_function(function_name).unwrap();
