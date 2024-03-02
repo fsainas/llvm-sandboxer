@@ -1,8 +1,10 @@
 use inkwell::module::Module;
 use inkwell::values::FunctionValue;
+use inkwell::context::Context;
 use inkwell::values::PointerValue;
 use inkwell::values::BasicValueEnum;
 use inkwell::values::InstructionOpcode::{Call, Load, Store};
+use inkwell::IntPredicate::SLE;
 
 /// Removes a function call in the body of an LLVM IR function
 pub fn remove_function_call(module: &Module, caller_name: &str, callee_name: &str) {
@@ -28,14 +30,40 @@ pub fn remove_function_call(module: &Module, caller_name: &str, callee_name: &st
 }
 
 /// Checks if a given PointerValue is contained within a vector of protected PointerValues.
-fn _is_address_protected(protected_ptrs: &[(PointerValue, u64)], ptr: &PointerValue, size: u64) -> bool {
+fn _is_address_protected(
+    protected_ptrs: &[(PointerValue, u64)], 
+    ptr: PointerValue, 
+    offset: u64) -> bool {
 
-    for &(protected_ptr, protected_size) in protected_ptrs {
+    for &(protected_ptr, protected_offset) in protected_ptrs {
 
-        println!("protected_ptr: {:?}\n", protected_ptr);
-        println!("ptr: {:?}\n", ptr);
-        if protected_ptr.eq(ptr) && protected_size >= size {
-            return true; // Found a match, return true
+        // Protected pointer and pointer accessed are the same
+        if protected_ptr == ptr && protected_offset >= offset {
+            return true;
+        } else {
+            let context = Context::create();
+            let i64_type = context.i64_type();
+
+            unsafe {
+                // Cast offset to IntValue
+                let protected_offset_as_int_value = i64_type.const_int(protected_offset, false);
+                // Compute the last protected address (protected_ptr + offset)
+                let last_protected_ptr = protected_ptr.const_gep(i64_type, &[protected_offset_as_int_value]); 
+
+
+                // Cast protected_ptr to IntValue
+                let protected_ptr_as_int_value = protected_ptr.const_to_int(i64_type);
+                let last_protected_ptr_as_int_value = last_protected_ptr.const_to_int(i64_type);
+                let ptr_as_int_value = ptr.const_to_int(i64_type);
+                println!("PTR: {:?}", protected_ptr_as_int_value);
+                println!("LAST PTR: {:?}", last_protected_ptr_as_int_value);
+                // Check if ptr points inside the range [protected_ptr, last_protected_pointer]
+                let res = protected_ptr_as_int_value.const_int_compare(SLE, ptr_as_int_value).get_sign_extended_constant();
+                println!("RES: {:?}", res);
+
+                // TODO
+            }
+
         }
 
     }
@@ -48,7 +76,7 @@ fn _is_address_protected(protected_ptrs: &[(PointerValue, u64)], ptr: &PointerVa
 pub fn verify(function: FunctionValue) -> bool {
 
     // Keeps track of protected memory addresses
-    // Pointer and size
+    // (pointer, offset)
     let mut protected_ptrs: Vec<(PointerValue, u64)> = Vec::new();
 
     // Iterate over the basic blocks in the function
@@ -64,14 +92,15 @@ pub fn verify(function: FunctionValue) -> bool {
                 // Check if it is the call to `utx1`
                 if instr.to_string().contains("utx1") {         // Not sure if this is safe
 
-                    // Extract pointer value and size to protect
-                    let (BasicValueEnum::PointerValue(ptr), BasicValueEnum::IntValue(size)) = (
+                    // Extract pointer value and offset to protect
+                    let (BasicValueEnum::PointerValue(ptr), BasicValueEnum::IntValue(offset)) = (
                         instr.get_operand(0).unwrap().unwrap_left(),
                         instr.get_operand(1).unwrap().unwrap_left()
                         ) else { todo!(); };
 
-                    let Some(size_as_u64) = size.get_zero_extended_constant() else { todo!(); };
-                    protected_ptrs.push((ptr, size_as_u64));
+                    let Some(offset_as_u64) = offset.get_zero_extended_constant() else { todo!() };
+                    protected_ptrs.push((ptr, offset_as_u64));
+
                 }
 
             }
@@ -83,8 +112,7 @@ pub fn verify(function: FunctionValue) -> bool {
 
                 let BasicValueEnum::PointerValue(ptr) = instr.get_operand(0).unwrap().unwrap_left() else { todo!(); };
 
-                if !_is_address_protected(&protected_ptrs, &ptr, alignment as u64) {
-                    println!("{:?}", protected_ptrs);
+                if !_is_address_protected(&protected_ptrs, ptr, alignment as u64) {
                     return false;
                 }
 
@@ -97,15 +125,16 @@ pub fn verify(function: FunctionValue) -> bool {
 
                 let BasicValueEnum::PointerValue(ptr) = instr.get_operand(1).unwrap().unwrap_left() else { todo!(); };
 
-                if !_is_address_protected(&protected_ptrs, &ptr, alignment as u64) {
-                    println!("{:?}", protected_ptrs);
+                if !_is_address_protected(&protected_ptrs, ptr, alignment as u64) {
                     return false;
                 }
+
             }
+
         }
+
     }
 
-    println!("{:?}", protected_ptrs);
     // Return true if the check passes
     true
 }
