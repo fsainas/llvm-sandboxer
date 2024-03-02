@@ -9,9 +9,8 @@ void utx1(void *addr, size_t len);
 static uint64_t shared_array[100];
 
 
-void bad_entry_3(uint64_t index)
+void good_entry_3()
 {
-	// The size parameter is wrong
-	utx1(&shared_array[index], 1);
-	shared_array[index] += 1;
+	utx1(&shared_array, sizeof (shared_array));
+	shared_array[1] += 1;
 }

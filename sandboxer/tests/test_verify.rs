@@ -65,3 +65,8 @@ fn test_good_entry_1() {
 fn test_good_entry_2() {
     assert_eq!(verify_usecase("good_entry_2"), true);
 }
+
+#[test]
+fn test_good_entry_3() {
+    assert_eq!(verify_usecase("good_entry_3"), true);
+}
