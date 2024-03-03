@@ -1,20 +1,59 @@
 # LLVM Sandboxer
-At this stage, the LLVM Sandboxer is expected to effectively identify a function
-call, specifically `utx()`, remove it from the code, and subsequently generate
-the updated LLVM IR code without its presence.
 
-## Structure
-- [`sandboxer/`](./sandboxer): This directory contains the LLVM
-  Sandboxer, which is written in Rust.
-- [`simple_add/`](./simple_add): This directory contains a
-  simple C code that contains a call to a function named
-  `utx()`. It is compiled into LLVM IR code.
+## Tests 
 
-## How to compile
-To compile all the components and run a simple demonstration use the following
-command:
+To run tests, run the following command: 
+``` 
+cargo test 
 ```
-$ make
-```
-This will run the sandboxer on the compiled `simple_add` example. More
-information [here](.sandboxer/README.md).
+
+## Modules and Functions
+
+### `sandboxer`
+
+#### `_is_address_protected` 
+
+This function checks whether a given memory address (represented by a pointer
+and an offset) is protected, meaning it falls within a range of protected
+memory addresses. 
+
+It takes three parameters:
+
+- `protected_ptrs`: A reference to a vector containing tuples of protected
+  memory addresses along with their offsets. 
+- `ptr`: The pointer value to be checked.
+- `offset`: The offset associated with the pointer value. 
+
+#### `verify` 
+
+This function statically verifies the memory accesses of a given function to
+ensure they are safe. It specifically looks for functions named `utx1` to
+identify memory addresses to protect and checks load and store instructions for
+compliance.
+
+It takes one parameter:
+
+- `function`: The LLVM FunctionValue to be verified. 
+
+## Challenges
+
+It's quite hard to tell which memory location a pointer is pointing to. In many
+cases it's not even possible at compile time (see
+[good_entry_1](tests/c_files/good_entry_1.c)).
+
+## What I did
+
+- Setup the test environment.
+- Parse Call, Load, Store.
+- Create the data structure to keep protected addresses.
+- Write a function that checks if a pointer is protected.
+
+## Todo
+
+- Write a function to compute the memory address pointed by a pointer. The
+  function should return None if the address cannot be known at compile time.
+
+- Using the function implemented in the former point, improve
+  `_is_address_protected` by non-trivially checking if a pointer points inside
+  a range of protected memory.
+
