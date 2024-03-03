@@ -1,5 +1,7 @@
 # LLVM Sandboxer
 
+Statically check if an LLVM-IR program makes accesses to unprotected memory.
+
 ## Tests 
 
 To run tests, run the following command: 
