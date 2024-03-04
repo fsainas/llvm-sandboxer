@@ -18,7 +18,7 @@ fn compile_c_files() {
 
 /// Test one LLVM bitcode file.
 fn verify_usecase(usecase_name: &str) -> bool {
-    let bitcode_path = format!("tests/c_files/{}.bc", usecase_name);
+    let bitcode_path = format!("target/tests/{}.bc", usecase_name);
     let bitcode_path = Path::new(&bitcode_path);
     if !bitcode_path.exists() {
         compile_c_files();

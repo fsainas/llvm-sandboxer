@@ -14,13 +14,16 @@ LLVMTXT := $(SOURCES:.c=.ll)
 all: $(BITCODES) $(LLVMTXT)
 
 # Rule to compile each C source file into LLVM bitcode
-%.bc: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+%.bc: %.c target_dir
+	$(CC) $(CFLAGS) -c -o ../../target/tests/$@ $<
 
 # Rule to compile each C source file into LLVM 
-%.ll: %.c
-	$(CC) $(CFLAGS) -S -o $@ $<
+%.ll: %.c target_dir
+	$(CC) $(CFLAGS) -S -o ../../target/tests/$@ $<
+
+target_dir:
+	mkdir -p ../../target/tests/
 
 clean:
-	rm -f *.bc *.ll
+	rm -f ../../target/tests/*.bc ../../target/tests/*.ll
 
