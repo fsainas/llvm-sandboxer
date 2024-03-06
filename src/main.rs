@@ -31,7 +31,7 @@ fn main() {
     // Print modified LLVM module
     println!("{}", module.print_to_string().to_string());
     */
-
+    /*
     // Get command-line arguments
     let args: Vec<String> = env::args().collect();
 
@@ -56,4 +56,5 @@ fn main() {
     let function = module.get_function(function_name).unwrap();
     let result = sandboxer::verify(function);
     println!("{}", result);
+    */
 }
