@@ -1,2 +1,2 @@
-pub mod sandboxer;
-pub mod runtime_checks;
+pub mod static_checks;
+pub mod runtime;

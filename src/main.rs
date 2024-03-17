@@ -2,7 +2,7 @@ use std::env;
 use std::path::Path;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use llvm_sandboxer::runtime_checks;
+use llvm_sandboxer::runtime;
 
 fn main() {
     // Get command-line arguments
@@ -25,7 +25,7 @@ fn main() {
     // Parse LLVM
     let module = Module::parse_bitcode_from_path(path, &context).unwrap();
 
-    if let Err(err) = runtime_checks::instrument(function_name, &context, &module) {
+    if let Err(err) = runtime::instrument(function_name, &context, &module) {
         println!("Error occurred: {:?}", err);
     } else {
         println!("Instrumentation completed successfully");
