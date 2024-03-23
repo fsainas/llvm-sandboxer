@@ -37,16 +37,34 @@ fn _move_instructions(context: &Context, instr: InstructionValue, to_block: &Bas
 fn _build_check(
     context: &Context,
     builder: Builder,
-    protected_ptr_val: PointerValue,
-    accessed_ptr_val: PointerValue,
+    protected_ptr: GlobalValue,
     protected_offset: GlobalValue,
+    accessed_ptr_val: PointerValue,
     alignment_as_int_value: IntValue,
     abort_block: BasicBlock,
     continue_block: BasicBlock,
     block_name: &str
     ) -> Result<(), String> {
     let i64_type = context.i64_type();
-    let pointer_type = context.i8_type().ptr_type(inkwell::AddressSpace::default());
+    let ptr_type = context.i8_type().ptr_type(inkwell::AddressSpace::default());
+
+    // Load pointer value from @protected_ptr
+    let protected_ptr_val: PointerValue = match builder.build_load(
+        ptr_type,
+        protected_ptr.as_pointer_value(),
+        &format!("protected_ptr_{}", block_name),
+        ) {
+        Ok(value) => value.into_pointer_value(),
+        Err(_) => return Err("Failed to load value for 'protected_offset_val'".to_string()),
+    };
+
+    // Compare accessed pointer value with protected pointer value
+    let accessed_lt_protected = builder.build_int_compare(
+        SLT, 
+        accessed_ptr_val, 
+        protected_ptr_val, 
+        &format!("accessed_lt_protected_{}", block_name)
+        ).map_err(|e| format!("Failed to build integer comparison for 'accessed_ptr_val' < 'protected_ptr_val': {:?}", e))?;
 
     // Load protected offset value
     let protected_offset_val = match builder.build_load(
@@ -58,20 +76,11 @@ fn _build_check(
         Err(_) => return Err("Failed to load value for 'protected_offset_val'".to_string()),
     };
 
-
-    // Compare accessed pointer value with protected pointer value
-    let accessed_lt_protected = builder.build_int_compare(
-        SLT, 
-        accessed_ptr_val, 
-        protected_ptr_val, 
-        &format!("accessed_lt_protected_{}", block_name)
-        ).map_err(|e| format!("Failed to build integer comparison for 'accessed_ptr_val' < 'protected_ptr_val': {:?}", e))?;
-
     unsafe {
 
         // Perform pointer arithmetic for last protected pointer value
         let last_protected_ptr_val = builder.build_gep(
-            pointer_type, 
+            ptr_type, 
             protected_ptr_val, 
             &[protected_offset_val], 
             &format!("last_protected_ptr_{}", block_name)
@@ -79,7 +88,7 @@ fn _build_check(
 
         // Perform pointer arithmetic for last accessed pointer value
         let last_accessed_ptr_val = builder.build_gep(
-            pointer_type, 
+            ptr_type, 
             accessed_ptr_val, 
             &[alignment_as_int_value], 
             &format!("last_accessed_ptr_{}", block_name)
@@ -215,7 +224,6 @@ pub fn instrument<'a>(
                     builder.position_before(&instr);
 
                     // Extract pointer values and alignment from the instruction
-                    let protected_ptr_val = protected_ptr.as_pointer_value();
                     let accessed_ptr_val = match instr.get_operand(0).unwrap().unwrap_left() {
                         BasicValueEnum::PointerValue(ptr) => ptr,
                         _ => return Err("Failed to extract accessed pointer value.".to_string())
@@ -228,9 +236,9 @@ pub fn instrument<'a>(
                     _build_check(
                         context, 
                         builder, 
-                        protected_ptr_val, 
-                        accessed_ptr_val, 
+                        protected_ptr, 
                         protected_offset,
+                        accessed_ptr_val, 
                         alignment_as_int_value,
                         abort_block,
                         continue_block,
@@ -253,7 +261,6 @@ pub fn instrument<'a>(
                     builder.position_before(&instr);
 
                     // Extract pointer values and alignment from the instruction
-                    let protected_ptr_val = protected_ptr.as_pointer_value();
                     let accessed_ptr_val = match instr.get_operand(1).unwrap().unwrap_left() {
                         BasicValueEnum::PointerValue(ptr) => ptr,
                         _ => return Err("Failed to extract accessed pointer value.".to_string())
@@ -266,9 +273,9 @@ pub fn instrument<'a>(
                     _build_check(
                         context, 
                         builder, 
-                        protected_ptr_val, 
-                        accessed_ptr_val, 
+                        protected_ptr, 
                         protected_offset,
+                        accessed_ptr_val, 
                         alignment_as_int_value,
                         abort_block,
                         continue_block,
