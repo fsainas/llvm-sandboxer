@@ -1,6 +1,6 @@
 CC = clang
 
-CFLAGS = -emit-llvm -O2
+CFLAGS = -emit-llvm -O2 -fno-inline-functions
 
 # List of C source files
 SOURCES := $(wildcard *.c)
@@ -23,6 +23,7 @@ all: $(BITCODES) $(LLVMTXT)
 
 target_dir:
 	mkdir -p ../../target/tests/
+	mkdir -p ../../target/tests/instrumented
 
 clean:
 	rm -f ../../target/tests/*.bc ../../target/tests/*.ll

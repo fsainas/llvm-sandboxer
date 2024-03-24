@@ -14,3 +14,9 @@ void bad_entry_1(uint64_t index)
 	utx0();
 	shared_array[index] += 1;
 }
+
+int main()
+{
+	bad_entry_1(1);
+	return 0;
+}

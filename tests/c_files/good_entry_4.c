@@ -16,3 +16,9 @@ void good_entry_4(uint64_t index)
 		shared_array[index] += 1;
 	}
 }
+
+int main()
+{
+	good_entry_4(1);
+	return 0;
+}

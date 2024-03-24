@@ -58,6 +58,15 @@ fn _build_check(
         Err(_) => return Err("Failed to load value for 'protected_offset_val'".to_string()),
     };
 
+    // Check if @protected_ptr is null
+    let null_ptr = context.i8_type().ptr_type(inkwell::AddressSpace::default()).const_null();
+    let protected_is_null = builder.build_int_compare(
+        EQ, 
+        protected_ptr_val, 
+        null_ptr,
+        &format!("protected_is_null_{}", block_name)
+        ).map_err(|e| format!("Failed to build integer comparison for 'accessed_ptr_val' < 'protected_ptr_val': {:?}", e))?;
+
     // Compare accessed pointer value with protected pointer value
     let accessed_lt_protected = builder.build_int_compare(
         SLT, 
@@ -103,9 +112,16 @@ fn _build_check(
             ).map_err(|e| format!("Failed to build integer comparison for 'last_accessed_ptr_val' > 'last_protected_ptr_val': {:?}", e))?;
 
         // Build logical OR operation for checks
-        let check = builder.build_or(
+        let check_range = builder.build_or(
             accessed_lt_protected, 
             last_acc_gt_last_prot, 
+            &format!("check_range_{}", block_name)
+            ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
+
+        // Build logical OR operation for checks
+        let check = builder.build_or(
+            protected_is_null, 
+            check_range, 
             &format!("check_{}", block_name)
             ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
 
@@ -186,7 +202,10 @@ pub fn instrument<'a>(
 
                 Call => {
                     // Check if it is the call to `utx1`
-                    if instr.to_string().contains("utx1") {         // Not sure if this is safe
+                    if instr.to_string().contains("utx0") {         
+                        // remove utx0 call
+                        instr.erase_from_basic_block();
+                    } else if instr.to_string().contains("utx1") {     // Check if it is the call to `utx1`, Not sure if this is safe
 
                         // Extract pointer value and offset to protect
                         let (ptr, offset) = match (instr.get_operand(0), instr.get_operand(1)) {
