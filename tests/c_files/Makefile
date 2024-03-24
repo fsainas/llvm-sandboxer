@@ -23,6 +23,7 @@ all: $(BITCODES) $(LLVMTXT)
 
 target_dir:
 	mkdir -p ../../target/tests/
+	mkdir -p ../../target/tests/instrumented
 
 clean:
 	rm -f ../../target/tests/*.bc ../../target/tests/*.ll

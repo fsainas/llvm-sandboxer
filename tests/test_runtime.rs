@@ -11,14 +11,31 @@ fn compile_c_files() {
     let c_files_dir_path = Path::new("tests/c_files/");
 
     // Compile the C source file
-    Command::new("make")
+    let _ = Command::new("make")
         .args(["-C", &c_files_dir_path.to_string_lossy()])
         .output()
-        .expect("Failed to compile C source file");
+        .expect("Failed to compile C source file.");
+}
+
+/// Compile instrumented LLVMs to bitcode
+fn compile_ll(filepath: &str) -> String {
+    let filepath = Path::new(filepath);
+    let exec_filepath = filepath.with_extension("o");
+    println!("{:?}", exec_filepath);
+
+    // Compile
+    let _ = Command::new("clang")
+        .arg(filepath)
+        .arg("-o")
+        .arg(exec_filepath.clone())
+        .output()
+        .expect("Failed to compile LLVMs to bitcode.");
+
+    exec_filepath.display().to_string()
 }
 
 /// Test one LLVM bitcode file.
-fn instrument_testcase(testcase_name: &str) {
+fn instrument_testcase(testcase_name: &str) -> String {
 
     // Get testcase bitcode path
     let bitcode_path = format!("target/tests/{}.bc", testcase_name);
@@ -42,16 +59,19 @@ fn instrument_testcase(testcase_name: &str) {
     // Retrive function value
     let function = module.get_function(testcase_name).unwrap();
     
-    //function.print_to_stderr();
-    module.print_to_stderr();
-    //println!("{:?}", module.print_to_string());
+    // Save to file
+    let filepath = format!("target/tests/instrumented/{}_instr.ll", testcase_name);
+    let _ = module.print_to_file(filepath.clone());
+
+    return filepath
 }
 
 // This tests are manual for now, to run one of them use the following command: 
 // `cargo test <test name>`.
 #[test]
 fn test_instrument_bad_entry_0() {
-    instrument_testcase("bad_entry_0");
+    let ll_filepath = instrument_testcase("bad_entry_0");
+    let filepath = compile_ll(&ll_filepath);
     assert_eq!(false, true);
 }
 
@@ -75,7 +95,8 @@ fn test_instrument_bad_entry_3() {
 
 #[test]
 fn test_instrument_good_entry_0() {
-    instrument_testcase("good_entry_0");
+    let ll_filepath = instrument_testcase("good_entry_0");
+    let filepath = compile_ll(&ll_filepath);
     assert_eq!(false, true);
 }
 
@@ -93,7 +114,8 @@ fn test_instrument_good_entry_2() {
 
 #[test]
 fn test_instrument_good_entry_3() {
-    instrument_testcase("good_entry_3");
+    let ll_filepath = instrument_testcase("good_entry_3");
+    let filepath = compile_ll(&ll_filepath);
     assert_eq!(false, true);
 }
 
