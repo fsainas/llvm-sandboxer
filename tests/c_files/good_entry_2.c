@@ -15,3 +15,9 @@ void good_entry_2(uint64_t index)
 	utx1(&shared_array[index], sizeof (shared_array[index]));
 	shared_array[index] += 1;
 }
+
+int main()
+{
+	good_entry_2(1);
+	return 0;
+}

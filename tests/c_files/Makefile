@@ -1,6 +1,6 @@
 CC = clang
 
-CFLAGS = -emit-llvm -O2
+CFLAGS = -emit-llvm -O2 -fno-inline-functions
 
 # List of C source files
 SOURCES := $(wildcard *.c)

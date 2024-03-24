@@ -23,3 +23,9 @@ void good_entry_5(uint64_t index)
 	}
 
 }
+
+int main()
+{
+	good_entry_5(5);
+	return 0;
+}

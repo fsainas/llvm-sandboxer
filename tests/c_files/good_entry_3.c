@@ -14,3 +14,9 @@ void good_entry_3()
 	utx1(&shared_array, sizeof (shared_array));
 	shared_array[1] += 1;
 }
+
+int main()
+{
+	good_entry_3();
+	return 0;
+}
