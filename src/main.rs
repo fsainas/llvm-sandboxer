@@ -30,6 +30,13 @@ fn main() {
     } else {
         println!("Instrumentation completed successfully");
     }
+
+    match module.verify() {
+        Ok(()) => (),
+        Err(e) => println!("{}", e.to_string())
+    }
+
+    // Save to file
+    let _ = module.print_to_file("result.ll");
     
-    module.print_to_stderr();
 }
