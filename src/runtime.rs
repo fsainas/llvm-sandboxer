@@ -1,5 +1,7 @@
 //! Adds runtime safeguards to llvm micro-transactions.
 
+use std::str::FromStr;
+
 // External crates
 use either::*;
 
@@ -11,10 +13,7 @@ use inkwell::module::Module;
 use inkwell::values::{BasicValueEnum, GlobalValue, InstructionValue, FunctionValue};
 use inkwell::values::{IntValue, PointerValue, PhiValue};
 use inkwell::IntPredicate::*;
-use inkwell::values::AnyValueEnum;
 use inkwell::values::AnyValue;
-
-use crate::runtime::BasicValueEnum::IntValue as IV;
 
 extern crate llvm_sys as llvm;
 
@@ -145,237 +144,159 @@ fn _build_check(
 
 
 
-// TODO: write documentation
-fn _get_phi_entries(instr: &InstructionValue) -> Vec<(String, String)> {
+/// Extracts entries of a phi instruction.
+fn _get_phi_entries<'a>(instr: &'a InstructionValue<'a>) -> Vec<(BasicValueEnum<'a>, String)> {
 
     if instr.get_opcode() != Phi {
         panic!("Instruction is not Phi!");
     }
 
     // TODO: Add reason
-    let instr_as_llvmstring = instr.print_to_string();
-    let instr_as_str = instr_as_llvmstring.to_str().expect("REASON");
+    let instr_as_llvmstring: inkwell::support::LLVMString = instr.print_to_string();
+    let instr_as_str: &str = instr_as_llvmstring.to_str().expect("REASON");
 
     // To store the Phi entries
-    let mut entries: Vec<(String, String)> = Vec::new();
+    let mut entries: Vec<(BasicValueEnum, String)> = Vec::new();
 
-    // Define a regular expression pattern to match labels
-    // Pattern for a phi entry with reference value e.g. [ %1, %0 ]
-    let ref_value_pattern: Regex = Regex::new(r" %(\w)+, %(\w)+").unwrap();
+    // Define a regular expression pattern to match phi entries e.g. [ %1, %0 ]
+    let entry_pattern: Regex = Regex::new(r" %?(\w)+, %(\w)+").unwrap();
 
-    for capture in ref_value_pattern.captures_iter(instr_as_str) {
+    for (i, capture) in entry_pattern.captures_iter(instr_as_str).enumerate() {
 
-        let binding = capture[0][1..].to_string();
-        let mut parts = binding.split(',');
-
-        // TODO: add msg
-        let value = parts.next().expect("msg");
-        let bb_name = parts.next().expect("msg");
-
-        entries.push((
-            value.to_string().replace(" ", ""), 
-            bb_name.to_string().replace(" %", "")));
-
-    }
-
-    // Pattern for a phi entry with immediate value e.g. [ 1, %0 ]
-    let imm_value_pattern: Regex = Regex::new(r" (\w)+, %(\w)+").unwrap();
-
-    for capture in imm_value_pattern.captures_iter(instr_as_str) {
-
-        let binding = capture[0][1..].to_string();
-        let mut parts = binding.split(',');
+        let binding: String = capture[0].to_string();
+        let mut parts: std::str::Split<'_, char> = binding.split(',');
 
         // TODO: add msg
-        let value = parts.next().expect("msg");
-        let bb_name = parts.next().expect("msg");
+        // If the pattern matches every entry, then we can retrieve the value with the "get_operand()" method
+        let value: BasicValueEnum<'_> = instr.get_operand(i as u32).expect("msg").left().expect("msg");
+        let bb_name: &str = parts.nth(1).expect("msg");
 
         entries.push((
-            value.to_string().replace(" ", ""), 
-            bb_name.to_string().replace(" %", "")));
-
+            value,
+            bb_name.to_string().replace(" %", "")));    // Clean basic block name
     }
 
     entries
 
 }
 
-// When a block is split in two blocks (block and continue_block), we have to
-// update the phi instructions that might be present in other blocks of the LLVM
-// IR module.  To find phi instructions to update, we look for branch
-// instructions in the newly created block, and explore the target blocks. If
-// there is a phi instruction in this target blocks, we should update the
-// predecessors.
+/// Updates a phi instruction
+fn _update_phi(
+    context: &Context, 
+    function: &FunctionValue,
+    phi_bb: BasicBlock,
+    instr: &InstructionValue, 
+    previous_bb_name: &str, 
+    continue_block: &BasicBlock) {
+
+    if instr.get_opcode() != Phi {
+        panic!("Instruction is not Phi!");
+    }
+
+    // Get entries of Phi instruction
+    let entries: Vec<(BasicValueEnum, String)> = _get_phi_entries(instr);
+
+    let mut bb_names: Vec<String> = Vec::new(); 
+
+    // Extract basic block names
+    for entry in &entries {
+        bb_names.push(entry.1.clone());
+    }
+
+    // If one of the labels is equal to the previous one, then update the instruction
+    let previous_bb_name_as_string = String::from_str(previous_bb_name).expect("msg");
+    if bb_names.contains(&previous_bb_name_as_string) {
+
+        // Create builder for new Phi instruction
+        let builder = context.create_builder();
+        builder.position_at(phi_bb, instr);
+
+        // TODO: change the type to the same as the previous phi
+        // TODO: expect msg
+        // TODO: change the name to a non-ambiguous one e.g. phi+counter
+        let new_phi: PhiValue = builder.build_phi(context.i64_type(), "phi").expect("REASON");
+
+        // Iterate over the entries of the old phi instructions to build the new one
+        for entry in entries {
+
+            // Unpack entry
+            let entry_value: BasicValueEnum<'_> = entry.0;
+            let entry_bb_name: String= entry.1.clone();
+
+            // If the entry reference is equal to the previous reference then change it with the new block
+            if entry_bb_name == *previous_bb_name {
+
+                new_phi.add_incoming(&[(&entry_value, *continue_block)]);
+
+            } else {    // else put the entry back into the new phi
+
+                // Find the basic block with the entry_bb_reference
+                for bb in function.get_basic_block_iter() {
+
+                    let bb_name = bb.get_name().to_str().unwrap(); 
+
+                    if bb_name == entry_bb_name {
+
+                            new_phi.add_incoming(&[(&entry_value, bb)]);
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        instr.replace_all_uses_with(&new_phi.as_instruction());
+        instr.remove_from_basic_block();
+            
+    }
+
+}
+
+/// When a block is split in two blocks (block and continue_block), we have to
+/// update the phi instructions that might be present in other blocks of the LLVM
+/// IR module.  To find phi instructions to update, we look for branch
+/// instructions in the newly created block, and explore the target blocks. If
+/// there is a phi instruction in this target blocks, we should update the
+/// predecessors.
 // TODO: Build tests for this function
-fn _check_phi(context: &Context, continue_block: &BasicBlock, function: &FunctionValue, previous_label: String) {
+fn _check_phi(context: &Context, function: &FunctionValue, continue_block: &BasicBlock, previous_bb_name: &str) {
 
     // Look for branch instructions
     for instr in continue_block.get_instructions() {
 
-        match instr.get_opcode() {
+        if instr.get_opcode() == Br {
 
-            Br => {
-                // Look for phi instructions in the first target blocks
-                let Some(Right(basic_block_1)) = instr.get_operand(1) else {todo!();};
+            // Look for phi instructions in the first target blocks
+            // TODO: add msg
+            let bb_1: BasicBlock<'_> = instr.get_operand(1).expect("msg").right().expect("msg");
 
-                // Look for Phi instructions
-                for instr_1 in basic_block_1.get_instructions() {
+            // Look for Phi instructions
+            for instr_1 in bb_1.get_instructions() {
 
-                    match instr_1.get_opcode() {
+                if instr_1.get_opcode() == Phi {
 
-                        Phi => {
-
-                            // ! No way to easily convert instructions with PHI opcode to phi_values
-                            //let phi_value = instr_1.as_any_value_enum().into_phi_value();
-
-                            // Get labels of previous blocks of the Phi instruction
-                            // TODO: expect msg
-                            // This seems the only way to obtain predecessors blocks
-                            let entries: Vec<(String, String)> = _get_phi_entries(&instr_1);
-
-                            let mut bb_names: Vec<String> = Vec::new(); 
-
-                            // Extract basic block names
-                            for entry in &entries {
-                                bb_names.push(entry.1.clone());
-                            }
-
-                            // If one of the labels is equal to the previous one, then update the instruction
-                            if bb_names.contains(&previous_label) {
-
-                                // Create builder for new Phi instruction
-                                let builder = context.create_builder();
-                                builder.position_at(basic_block_1, &instr_1);
-
-                                // TODO: change the type to the same as the previous phi
-                                // TODO: expect msg
-                                let new_phi: PhiValue = builder.build_phi(context.i64_type(), "phi").expect("REASON");
-
-                                println!("{:?}", continue_block);
-
-                                for entry in entries {
-                                    let entry_bb_value = entry.0.clone();
-                                    let entry_bb_name = entry.1.clone();
-                                    if entry.1 == previous_label.to_string() {
-                                        if let IV(value) = instr_1.get_operand(0).expect("msg").left().expect("msg") {
-                                            new_phi.add_incoming(&[
-                                                //(entry_bb_value, bb)
-                                                (&value, *continue_block)
-                                            ]);
-                                        }
-                                    } else {
-                                        for bb in function.get_basic_block_iter() {
-                                            let bb_name = bb.get_name().to_str().unwrap(); 
-
-                                            if bb_name == entry.1 {
-                                                if let IV(value) = instr_1.get_operand(0).expect("msg").left().expect("msg") {
-                                                    new_phi.add_incoming(&[
-                                                        //(entry_bb_value, bb)
-                                                        (&value, bb)
-                                                    ]);
-                                                }
-                                            }
-                                            // TODO: handle else here
-                                        }
-                                    }
-                                    instr_1.replace_all_uses_with(&new_phi.as_instruction());
-                                }
-
-                                instr_1.remove_from_basic_block();
-                                
-                            }
-
-                        }
-
-                        _ => ()
-
-                    }
+                    _update_phi(context, function, bb_1, &instr_1, previous_bb_name, continue_block);
 
                 }
 
-                let Some(Right(basic_block_2)) = instr.get_operand(2) else {todo!();};
-
-                // TODO: add second branch
-                // Look for Phi instructions
-                for instr_1 in basic_block_2.get_instructions() {
-
-                    match instr_1.get_opcode() {
-
-                        Phi => {
-
-                            // ! No way to easily convert instructions with PHI opcode to phi_values
-                            //let phi_value = instr_1.as_any_value_enum().into_phi_value();
-
-                            // Get labels of previous blocks of the Phi instruction
-                            // TODO: expect msg
-                            // This seems the only way to obtain predecessors blocks
-                            let entries: Vec<(String, String)> = _get_phi_entries(&instr_1);
-
-                            let mut bb_names: Vec<String> = Vec::new(); 
-
-                            // Extract basic block names
-                            for entry in &entries {
-                                bb_names.push(entry.1.clone());
-                            }
-
-                            // If one of the labels is equal to the previous one, then update the instruction
-                            if bb_names.contains(&previous_label) {
-
-                                // Create builder for new Phi instruction
-                                let builder = context.create_builder();
-                                builder.position_at(basic_block_1, &instr_1);
-
-                                // TODO: change the type to the same as the previous phi
-                                // TODO: expect msg
-                                //instr_1.set_name("phi");
-                                //instr_1.remove_from_basic_block();
-                                let new_phi: PhiValue = builder.build_phi(context.i64_type(), "phi").expect("REASON");
-
-                                for entry in entries {
-                                    let entry_bb_value = entry.0.clone();
-                                    let entry_bb_name = entry.1.clone();
-                                    if entry.1 == previous_label.to_string() {
-                                        if let IV(value) = instr_1.get_operand(0).expect("msg").left().expect("msg") {
-                                            new_phi.add_incoming(&[
-                                                //(entry_bb_value, bb)
-                                                (&value, *continue_block)
-                                            ]);
-                                        }
-                                        //new_phi.add_incoming(&[
-                                        //    (instr_1.get_operand(1), *continue_block)
-                                        //]);
-                                    } else {
-                                        for bb in function.get_basic_block_iter() {
-                                            let bb_name = bb.get_name().to_str().unwrap(); 
-
-                                            if bb_name == entry.1 {
-                                                if let IV(value) = instr_1.get_operand(0).expect("msg").left().expect("msg") {
-                                                    new_phi.add_incoming(&[
-                                                        //(entry_bb_value, bb)
-                                                        (&value, bb)
-                                                    ]);
-                                                }
-                                            }
-                                            // TODO: handle else here
-                                        }
-                                    }
-
-                                    instr_1.replace_all_uses_with(&new_phi.as_instruction());
-                                }
-
-                                instr_1.remove_from_basic_block();
-                            }
-
-                        }
-
-                        _ => ()
-
-                    }
-
-                }
             }
 
-            _ => ()
+            // Look for phi instructions in the second target blocks
+            // TODO: add msg
+            let bb_2: BasicBlock<'_> = instr.get_operand(2).expect("msg").right().expect("msg");
+
+            // Look for Phi instructions
+            for instr_2 in bb_2.get_instructions() {
+
+                if instr_2.get_opcode() == Phi {
+
+                    _update_phi(context, function, bb_2, &instr_2, previous_bb_name, continue_block);
+
+                }
+
+            }
 
         }
 
@@ -393,11 +314,9 @@ pub fn instrument<'a>(
     let function = module.get_function(function_name).unwrap();
 
     // Set a name for every basic block in the code
-    let mut block_counter = 0;
-    for bb in function.get_basic_blocks() {
-        let name = format!("bb{}", block_counter);
+    for (i, bb) in function.get_basic_blocks().into_iter().enumerate() {
+        let name = format!("bb{}", i);
         bb.set_name(&name);
-        block_counter += 1;
     }
 
     // Define the type of the abort function: fn() -> void
@@ -528,9 +447,7 @@ pub fn instrument<'a>(
                     // Check if there is a branch in the new block.
                     // If there is, check if there are phi instructions
                     // in the target blocks. If there are, update previous blocks.
-                    //let block_name = format!("{}", load_counter);
-                    //basic_block.set_name(block_name)
-                    _check_phi(context, &continue_block, &function, current_block_name.clone());
+                    _check_phi(context, &function,&continue_block, &current_block_name);
                     current_block_name = continue_block.get_name().to_str().unwrap().to_string();
                 }
 
@@ -572,8 +489,7 @@ pub fn instrument<'a>(
                     // Check if there is a branch in the new block.
                     // If there is, check if there are phi instructions
                     // in the target blocks. If there are, update previous blocks.
-                    // ? How do I get the basic block label/name/identifier? 
-                    _check_phi(context, &continue_block, &function, current_block_name.clone());
+                    _check_phi(context, &function,&continue_block, &current_block_name);
                     current_block_name = continue_block.get_name().to_str().unwrap().to_string();
 
                 }
