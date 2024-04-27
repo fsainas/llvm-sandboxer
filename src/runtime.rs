@@ -1,6 +1,5 @@
 //! Adds runtime safeguards to llvm micro-transactions.
 
-use std::array;
 use std::str::FromStr;
 
 // External crates
@@ -15,7 +14,7 @@ use inkwell::values::{BasicValueEnum, GlobalValue, InstructionValue, FunctionVal
 use inkwell::values::{IntValue, PointerValue, PhiValue};
 use inkwell::IntPredicate::*;
 use inkwell::values::AnyValue;
-use inkwell::types::AnyTypeEnum::{ArrayType, FloatType, FunctionType, IntType, PointerType, StructType, VectorType, VoidType};
+use inkwell::types::AnyTypeEnum::{ArrayType, FloatType, IntType, PointerType, StructType, VectorType};
 use inkwell::types::BasicTypeEnum;
 
 extern crate llvm_sys as llvm;
@@ -27,12 +26,12 @@ use regex::Regex;
 use inkwell::values::InstructionOpcode::{Call, Load, Store, Phi, Br};
 
 /// Moves an instruction `instr` and the following ones to a new block `to_block`
-fn _move_instructions(context: &Context, instr: InstructionValue, to_block: &BasicBlock) {
+fn _move_instructions(context: &Context, instr: &InstructionValue, to_block: &BasicBlock) {
 
     let builder = context.create_builder();
     builder.position_at_end(*to_block);
 
-    let mut current_instr = instr;
+    let mut current_instr = *instr;
     while let Some(next_instr) = current_instr.get_next_instruction() {
         current_instr.remove_from_basic_block();
         builder.insert_instruction(&current_instr, None);
@@ -52,7 +51,7 @@ fn _build_check(
     protected_offset: GlobalValue,
     accessed_ptr_val: PointerValue,
     alignment_as_int_value: IntValue,
-    abort_block: BasicBlock,
+    abort_block: &BasicBlock,
     continue_block: BasicBlock,
     block_name: &str
     ) -> Result<(), String> {
@@ -137,7 +136,7 @@ fn _build_check(
             ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
 
         // Create the instruction that evaluates comparison and chooses to abort or continue
-        builder.build_conditional_branch(check, abort_block, continue_block)
+        builder.build_conditional_branch(check, *abort_block, continue_block)
             .map_err(|e| format!("Failed to build conditional branch: {:?}", e))?;
 
     }
@@ -331,6 +330,63 @@ fn _check_phi(
 
 }
 
+fn _handle_store_or_load(
+    context: &Context, 
+    function: &FunctionValue,
+    instr: &InstructionValue, 
+    protected_mem: (GlobalValue, GlobalValue),
+    abort_bb: &BasicBlock,
+    prev_bb: &BasicBlock, 
+    new_bb_name: &str,
+    current_block_name: &mut String,
+    phi_counter: &mut u32) -> Result<(), String>{
+
+    let new_bb: BasicBlock<'_> = context.insert_basic_block_after(*prev_bb, new_bb_name);
+
+    // Create a new builder and position it before the instruction
+    let builder: Builder<'_> = context.create_builder();
+    builder.position_before(&instr);
+
+    let operand_index = match instr.get_opcode() {
+        Load => 0,
+        Store => 1,
+        other => return Err(format!("Expected Load or Store, found {:?}", other))
+    };
+
+    // Extract pointer values
+    let accessed_ptr_val: PointerValue<'_> = match instr.get_operand(operand_index).unwrap().unwrap_left() {
+        BasicValueEnum::PointerValue(ptr) => ptr,
+        _ => return Err("Failed to extract accessed pointer value.".to_string())
+    };
+
+    // Extract alignment 
+    let alignment_as_int_value: IntValue<'_> = context.i64_type().const_int(
+        instr.get_alignment().expect("Failed to get alignment") as u64, false
+        );
+
+    _build_check(
+        context, 
+        builder, 
+        protected_mem.0, 
+        protected_mem.1,
+        accessed_ptr_val, 
+        alignment_as_int_value,
+        abort_bb,
+        new_bb,
+        new_bb_name)?;
+
+    // Move instructions to the continue_block
+    _move_instructions(context, instr, &new_bb);
+
+    // Check if there is a branch in the new block.
+    // If there is, check if there are phi instructions
+    // in the target blocks. If there are, update previous blocks.
+    _check_phi(context, function, &new_bb, &current_block_name, phi_counter);
+    *current_block_name = new_bb_name.clone().to_string();
+
+    Ok(())
+}
+
 /// Given a LLVM function adds runtime memory checks
 pub fn instrument<'a>(
     function_name: &str, 
@@ -353,11 +409,11 @@ pub fn instrument<'a>(
     let abort_func = module.add_function("abort", abort_type, None);
 
     // ***** Append abort block ***** //
-    let abort_block = context.append_basic_block(function, "abort");
+    let abort_bb: BasicBlock<'_> = context.append_basic_block(function, "abort");
 
     // Create builder and position at the end of the abort basic block
-    let abort_builder = context.create_builder();
-    abort_builder.position_at_end(abort_block);
+    let abort_builder: Builder<'_> = context.create_builder();
+    abort_builder.position_at_end(abort_bb);
 
     // Call abort function with noreturn and nounwind attrs
     let _ = abort_builder.build_call(abort_func, &[], "abort");
@@ -380,11 +436,12 @@ pub fn instrument<'a>(
     let i64_type = context.i64_type();
 
     // Add globals
-    let protected_ptr = module.add_global(pointer_type, None, "protected_ptr");
-    let protected_offset = module.add_global(i64_type, None, "protected_offset");
+    let protected_ptr: GlobalValue<'_> = module.add_global(pointer_type, None, "protected_ptr");
+    let protected_offset: GlobalValue<'_> = module.add_global(i64_type, None, "protected_offset");
+    let protected_mem: (GlobalValue<'_>, GlobalValue<'_>) = (protected_ptr, protected_offset);
 
     // Initialize globals
-    let null_ptr = context.i8_type().ptr_type(inkwell::AddressSpace::default()).const_null();
+    let null_ptr: PointerValue<'_> = context.i8_type().ptr_type(inkwell::AddressSpace::default()).const_null();
     protected_ptr.set_initializer(&null_ptr);
 
     let zero_offset = i64_type.const_int(0, false);
@@ -400,7 +457,8 @@ pub fn instrument<'a>(
     // Iterate over the basic blocks in the function
     for basic_block in function.get_basic_blocks() {
 
-        let mut current_block_name: String = basic_block.get_name().to_str().unwrap().to_string();
+        let mut current_block_name: String = basic_block.get_name().to_str()
+        .expect("Failed to get basic block name.").to_string();
 
         // Iterate over the instructions in the basic block
         let instructions = basic_block.get_instructions();
@@ -442,85 +500,38 @@ pub fn instrument<'a>(
                 Load => {
 
                     // Create the block to store the rest of the code
-                    let block_name = format!("load{}", load_counter);
+                    let new_bb_name = format!("load{}", load_counter);
                     load_counter += 1;
-                    let continue_block = context.insert_basic_block_after(basic_block, &block_name);
 
-                    // Create a new builder and position it before the Load instruction
-                    let builder = context.create_builder();
-                    builder.position_before(&instr);
-
-                    // Extract pointer values and alignment from the instruction
-                    let accessed_ptr_val = match instr.get_operand(0).unwrap().unwrap_left() {
-                        BasicValueEnum::PointerValue(ptr) => ptr,
-                        _ => return Err("Failed to extract accessed pointer value.".to_string())
-                    };
-
-                    let alignment_as_int_value = i64_type.const_int(
-                        instr.get_alignment().expect("Failed to get alignment") as u64, false
-                        );
-
-                    _build_check(
+                    _handle_store_or_load(
                         context, 
-                        builder, 
-                        protected_ptr, 
-                        protected_offset,
-                        accessed_ptr_val, 
-                        alignment_as_int_value,
-                        abort_block,
-                        continue_block,
-                        &block_name)?;
+                        &function, 
+                        &instr, 
+                        protected_mem, 
+                        &abort_bb, 
+                        &basic_block, 
+                        &new_bb_name, 
+                        &mut current_block_name, 
+                        &mut phi_counter)?;
 
-                    // Move instructions to the continue_block
-                    _move_instructions(context, instr, &continue_block);
-
-                    // Check if there is a branch in the new block.
-                    // If there is, check if there are phi instructions
-                    // in the target blocks. If there are, update previous blocks.
-                    _check_phi(context, &function,&continue_block, &current_block_name, &mut phi_counter);
-                    current_block_name = continue_block.get_name().to_str().unwrap().to_string();
                 }
 
                 Store => {
 
                     // Create the block to store the rest of the code
-                    let block_name = format!("store{}", store_counter);
-                    let continue_block = context.insert_basic_block_after(basic_block, &block_name);
+                    let new_bb_name: String = format!("store{}", store_counter);
                     store_counter += 1;
 
-                    // Create a new builder and position it before the Load instruction
-                    let builder = context.create_builder();
-                    builder.position_before(&instr);
-
-                    // Extract pointer values and alignment from the instruction
-                    let accessed_ptr_val = match instr.get_operand(1).unwrap().unwrap_left() {
-                        BasicValueEnum::PointerValue(ptr) => ptr,
-                        _ => return Err("Failed to extract accessed pointer value.".to_string())
-                    };
-
-                    let alignment_as_int_value = i64_type.const_int(
-                        instr.get_alignment().expect("Failed to get alignment") as u64, false
-                        );
-
-                    _build_check(
+                    _handle_store_or_load(
                         context, 
-                        builder, 
-                        protected_ptr, 
-                        protected_offset,
-                        accessed_ptr_val, 
-                        alignment_as_int_value,
-                        abort_block,
-                        continue_block,
-                        &block_name)?;
-
-                    // Move instructions to the continue_block
-                    _move_instructions(context, instr, &continue_block);
-
-                    // Check if there is a branch in the new block.
-                    // If there is, check if there are phi instructions
-                    // in the target blocks. If there are, update previous blocks.
-                    _check_phi(context, &function,&continue_block, &current_block_name, &mut phi_counter);
-                    current_block_name = continue_block.get_name().to_str().unwrap().to_string();
+                        &function, 
+                        &instr, 
+                        protected_mem, 
+                        &abort_bb, 
+                        &basic_block, 
+                        &new_bb_name, 
+                        &mut current_block_name, 
+                        &mut phi_counter)?;
 
                 }
 
