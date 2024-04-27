@@ -1,5 +1,6 @@
 //! Adds runtime safeguards to llvm micro-transactions.
 
+use std::array;
 use std::str::FromStr;
 
 // External crates
@@ -14,6 +15,8 @@ use inkwell::values::{BasicValueEnum, GlobalValue, InstructionValue, FunctionVal
 use inkwell::values::{IntValue, PointerValue, PhiValue};
 use inkwell::IntPredicate::*;
 use inkwell::values::AnyValue;
+use inkwell::types::AnyTypeEnum::{ArrayType, FloatType, FunctionType, IntType, PointerType, StructType, VectorType, VoidType};
+use inkwell::types::BasicTypeEnum;
 
 extern crate llvm_sys as llvm;
 
@@ -143,7 +146,6 @@ fn _build_check(
 }
 
 
-
 /// Extracts entries of a phi instruction.
 fn _get_phi_entries<'a>(instr: &'a InstructionValue<'a>) -> Vec<(BasicValueEnum<'a>, String)> {
 
@@ -151,9 +153,8 @@ fn _get_phi_entries<'a>(instr: &'a InstructionValue<'a>) -> Vec<(BasicValueEnum<
         panic!("Instruction is not Phi!");
     }
 
-    // TODO: Add reason
     let instr_as_llvmstring: inkwell::support::LLVMString = instr.print_to_string();
-    let instr_as_str: &str = instr_as_llvmstring.to_str().expect("REASON");
+    let instr_as_str: &str = instr_as_llvmstring.to_str().expect("Failed to convert LLVMString to &str.");
 
     // To store the Phi entries
     let mut entries: Vec<(BasicValueEnum, String)> = Vec::new();
@@ -166,10 +167,14 @@ fn _get_phi_entries<'a>(instr: &'a InstructionValue<'a>) -> Vec<(BasicValueEnum<
         let binding: String = capture[0].to_string();
         let mut parts: std::str::Split<'_, char> = binding.split(',');
 
-        // TODO: add msg
         // If the pattern matches every entry, then we can retrieve the value with the "get_operand()" method
-        let value: BasicValueEnum<'_> = instr.get_operand(i as u32).expect("msg").left().expect("msg");
-        let bb_name: &str = parts.nth(1).expect("msg");
+        let value: BasicValueEnum<'_> = instr.get_operand(i as u32)
+        .expect("Failed to get value from phi instruction. Reason: Operand not found.")
+        .left()
+        .expect("Expected BasicValueEnum, found BasicBlock.");
+
+        let bb_name: &str = parts.nth(1)
+        .expect("Failed to get the BasicBlock name from capture. Reason: The 'parts' iterator does not contain a second element.");
 
         entries.push((
             value,
@@ -204,17 +209,27 @@ fn _update_phi(
     }
 
     // If one of the labels is equal to the previous one, then update the instruction
-    let previous_bb_name_as_string = String::from_str(previous_bb_name).expect("msg");
+    let previous_bb_name_as_string = String::from_str(previous_bb_name)
+    .expect("Failed to convert previous_bb_name to String.");
     if bb_names.contains(&previous_bb_name_as_string) {
 
         // Create builder for new Phi instruction
         let builder = context.create_builder();
         builder.position_at(phi_bb, instr);
 
-        // TODO: change the type to the same as the previous phi
         // TODO: expect msg
         // TODO: change the name to a non-ambiguous one e.g. phi+counter
-        let new_phi: PhiValue = builder.build_phi(context.i64_type(), "phi").expect("REASON");
+        let phi_type = match instr.get_type() {
+            ArrayType(t) => BasicTypeEnum::ArrayType(t),
+            FloatType(t) => BasicTypeEnum::FloatType(t),
+            IntType(t) => BasicTypeEnum::IntType(t),
+            PointerType(t) => BasicTypeEnum::PointerType(t),
+            StructType(t) => BasicTypeEnum::StructType(t),
+            VectorType(t) => BasicTypeEnum::VectorType(t),
+            other_type => panic!("Expected BasicType, found {}", other_type),
+        };
+
+        let new_phi: PhiValue = builder.build_phi(phi_type, "phi").expect("REASON");
 
         // Iterate over the entries of the old phi instructions to build the new one
         for entry in entries {
