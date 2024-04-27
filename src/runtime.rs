@@ -193,7 +193,7 @@ fn _update_phi(
     instr: &InstructionValue, 
     previous_bb_name: &str, 
     continue_block: &BasicBlock,
-    phi_counter: &u32) {
+    phi_counter: &mut u32) {
 
     if instr.get_opcode() != Phi {
         panic!("Instruction is not Phi!");
@@ -218,7 +218,7 @@ fn _update_phi(
         let builder = context.create_builder();
         builder.position_at(phi_bb, instr);
 
-        // TODO: expect msg
+        // Extract phi type
         let phi_type = match instr.get_type() {
             ArrayType(t) => BasicTypeEnum::ArrayType(t),
             FloatType(t) => BasicTypeEnum::FloatType(t),
@@ -230,7 +230,9 @@ fn _update_phi(
         };
 
         let phi_name = format!("phi{}", phi_counter);
-        let new_phi: PhiValue = builder.build_phi(phi_type, &phi_name).expect("REASON");
+        *phi_counter += 1;
+        let new_phi: PhiValue = builder.build_phi(phi_type, &phi_name)
+        .expect("Failed to build phi value.");
 
         // Iterate over the entries of the old phi instructions to build the new one
         for entry in entries {
@@ -282,7 +284,7 @@ fn _check_phi(
     function: &FunctionValue, 
     continue_block: &BasicBlock, 
     previous_bb_name: &str, 
-    phi_counter: &u32) {
+    phi_counter: &mut u32) {
 
     // Look for branch instructions
     for instr in continue_block.get_instructions() {
@@ -290,8 +292,10 @@ fn _check_phi(
         if instr.get_opcode() == Br {
 
             // Look for phi instructions in the first target blocks
-            // TODO: add msg
-            let bb_1: BasicBlock<'_> = instr.get_operand(1).expect("msg").right().expect("msg");
+            let bb_1: BasicBlock<'_> = instr.get_operand(1)
+            .expect("Failed to get operand at index 1.")
+            .right()
+            .expect("Expected BasicBlock, found BasicValueEnum.");
 
             // Look for Phi instructions
             for instr_1 in bb_1.get_instructions() {
@@ -305,8 +309,10 @@ fn _check_phi(
             }
 
             // Look for phi instructions in the second target blocks
-            // TODO: add msg
-            let bb_2: BasicBlock<'_> = instr.get_operand(2).expect("msg").right().expect("msg");
+            let bb_2: BasicBlock<'_> = instr.get_operand(2)
+            .expect("Failed to get operand at index 2.")
+            .right()
+            .expect("Expected BasicBlock, found BasicValueEnum.");
 
             // Look for Phi instructions
             for instr_2 in bb_2.get_instructions() {
@@ -471,7 +477,7 @@ pub fn instrument<'a>(
                     // Check if there is a branch in the new block.
                     // If there is, check if there are phi instructions
                     // in the target blocks. If there are, update previous blocks.
-                    _check_phi(context, &function,&continue_block, &current_block_name, &phi_counter);
+                    _check_phi(context, &function,&continue_block, &current_block_name, &mut phi_counter);
                     current_block_name = continue_block.get_name().to_str().unwrap().to_string();
                 }
 
@@ -513,7 +519,7 @@ pub fn instrument<'a>(
                     // Check if there is a branch in the new block.
                     // If there is, check if there are phi instructions
                     // in the target blocks. If there are, update previous blocks.
-                    _check_phi(context, &function,&continue_block, &current_block_name, &phi_counter);
+                    _check_phi(context, &function,&continue_block, &current_block_name, &mut phi_counter);
                     current_block_name = continue_block.get_name().to_str().unwrap().to_string();
 
                 }
