@@ -47,16 +47,21 @@ fn _move_instructions(context: &Context, instr: &InstructionValue, to_block: &Ba
 fn _build_check(
     context: &Context,
     builder: Builder,
-    protected_ptr: GlobalValue,
-    protected_offset: GlobalValue,
-    accessed_ptr_val: PointerValue,
-    alignment_as_int_value: IntValue,
+    protected_mem: (GlobalValue, GlobalValue),
+    accessed_mem: (PointerValue, IntValue),
     abort_block: &BasicBlock,
     continue_block: BasicBlock,
     block_name: &str
     ) -> Result<(), String> {
+
     let i64_type = context.i64_type();
     let ptr_type = context.i8_type().ptr_type(inkwell::AddressSpace::default());
+
+    // Unpacking
+    let protected_ptr: GlobalValue<'_> = protected_mem.0;
+    let protected_offset: GlobalValue<'_> = protected_mem.1;
+    let accessed_ptr_val: PointerValue<'_> = accessed_mem.0;
+    let alignment_as_int_value: IntValue<'_> = accessed_mem.1;
 
     // Load pointer value from @protected_ptr
     let protected_ptr_val: PointerValue = match builder.build_load(
@@ -345,7 +350,7 @@ fn _handle_store_or_load(
 
     // Create a new builder and position it before the instruction
     let builder: Builder<'_> = context.create_builder();
-    builder.position_before(&instr);
+    builder.position_before(instr);
 
     let operand_index = match instr.get_opcode() {
         Load => 0,
@@ -367,10 +372,8 @@ fn _handle_store_or_load(
     _build_check(
         context, 
         builder, 
-        protected_mem.0, 
-        protected_mem.1,
-        accessed_ptr_val, 
-        alignment_as_int_value,
+        protected_mem,
+        (accessed_ptr_val, alignment_as_int_value),
         abort_bb,
         new_bb,
         new_bb_name)?;
@@ -381,8 +384,8 @@ fn _handle_store_or_load(
     // Check if there is a branch in the new block.
     // If there is, check if there are phi instructions
     // in the target blocks. If there are, update previous blocks.
-    _check_phi(context, function, &new_bb, &current_block_name, phi_counter);
-    *current_block_name = new_bb_name.clone().to_string();
+    _check_phi(context, function, &new_bb, current_block_name, phi_counter);
+    *current_block_name = new_bb_name.to_string();
 
     Ok(())
 }
