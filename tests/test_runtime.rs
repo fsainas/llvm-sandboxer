@@ -188,3 +188,33 @@ fn test_instrument_good_entry_5() {
 
     assert_eq!(output.status.code(), Some(0));
 }
+
+#[test]
+fn test_instrument_phi_0() {
+    let ll_filepath = instrument_testcase("phi_0");
+    let filepath = compile_ll(&ll_filepath);
+
+    let output = Command::new(filepath.clone())
+        .output()
+        .expect(&format!("Cannot execute {}", filepath));
+
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
+fn test_instrument_benchmark_1() {
+    let ll_filepath = instrument_testcase("benchmark_1");
+    let filepath = compile_ll(&ll_filepath);
+
+
+    println!("{}", filepath);
+    assert_eq!(true, false);
+    /*
+    let output = Command::new(filepath.clone())
+        .output()
+        .expect(&format!("Cannot execute {}", filepath));
+
+    println!("{:?}", output);
+    assert_eq!(output.status.code(), Some(0));
+     */
+}
