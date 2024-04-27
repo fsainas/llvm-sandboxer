@@ -276,6 +276,27 @@ fn _update_phi(
 
 }
 
+/// Finds updates all phi instructions in the basic block bb
+fn _update_phi_in_branch(
+    context: &Context, 
+    function: &FunctionValue, 
+    bb: &BasicBlock, 
+    previous_bb_name: &str, 
+    new_bb: &BasicBlock, 
+    phi_counter: &mut u32) {
+
+    for instr in bb.get_instructions() {
+
+        if instr.get_opcode() == Phi {
+
+            _update_phi(context, function,*bb, &instr, previous_bb_name, new_bb, phi_counter);
+
+        }
+
+    }
+
+}
+
 /// When a block is split in two blocks (block and continue_block), we have to
 /// update the phi instructions that might be present in other blocks of the LLVM
 /// IR module.  To find phi instructions to update, we look for branch
@@ -295,37 +316,33 @@ fn _check_phi(
 
         if instr.get_opcode() == Br {
 
-            // Look for phi instructions in the first target blocks
-            let bb_1: BasicBlock<'_> = instr.get_operand(1)
-            .expect("Failed to get operand at index 1.")
-            .right()
-            .expect("Expected BasicBlock, found BasicValueEnum.");
+            // Unconditional branch
+            if instr.get_num_operands() == 1 {
 
-            // Look for Phi instructions
-            for instr_1 in bb_1.get_instructions() {
+                let bb: BasicBlock<'_> = instr.get_operand(0)
+                .expect("Failed to get branch operand at index 0.")
+                .right()
+                .expect("Expected BasicBlock, found BasicValueEnum.");
 
-                if instr_1.get_opcode() == Phi {
+                _update_phi_in_branch(context, function, &bb, previous_bb_name, continue_block, phi_counter);
+                
+            } else {    // Conditional branch
 
-                    _update_phi(context, function, bb_1, &instr_1, previous_bb_name, continue_block, phi_counter);
+                // Look for phi instructions in the first target blocks
+                let bb_1: BasicBlock<'_> = instr.get_operand(1)
+                .expect("Failed to get operand at index 1.")
+                .right()
+                .expect("Expected BasicBlock, found BasicValueEnum.");
 
-                }
+                _update_phi_in_branch(context, function, &bb_1, previous_bb_name, continue_block, phi_counter);
 
-            }
+                // Look for phi instructions in the second target blocks
+                let bb_2: BasicBlock<'_> = instr.get_operand(2)
+                .expect("Failed to get operand at index 2.")
+                .right()
+                .expect("Expected BasicBlock, found BasicValueEnum.");
 
-            // Look for phi instructions in the second target blocks
-            let bb_2: BasicBlock<'_> = instr.get_operand(2)
-            .expect("Failed to get operand at index 2.")
-            .right()
-            .expect("Expected BasicBlock, found BasicValueEnum.");
-
-            // Look for Phi instructions
-            for instr_2 in bb_2.get_instructions() {
-
-                if instr_2.get_opcode() == Phi {
-
-                    _update_phi(context, function, bb_2, &instr_2, previous_bb_name, continue_block, phi_counter);
-
-                }
+                _update_phi_in_branch(context, function, &bb_2, previous_bb_name, continue_block, phi_counter);
 
             }
 
