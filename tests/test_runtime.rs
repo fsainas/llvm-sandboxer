@@ -4,14 +4,13 @@ use std::path::Path;
 use std::process::Command;
 use inkwell::module::Module;
 use inkwell::context::Context;
-//use inkwell::values::FunctionValue;
 
 /// Compile testcases' C sources.
 fn compile_c_files() {
     let c_files_dir_path = Path::new("tests/c_files/");
 
     // Compile the C source file
-    let output = Command::new("make")
+    Command::new("make")
         .args(["-C", &c_files_dir_path.to_string_lossy()])
         .output()
         .expect("Failed to compile C source file.");
@@ -57,9 +56,6 @@ fn instrument_testcase(testcase_name: &str) -> String {
         println!("Instrumentation completed successfully");
     }
 
-    // Retrive function value
-    let function = module.get_function(testcase_name).unwrap();
-    
     // Save to file
     let filepath = format!("target/tests/instrumented/{}_instr.ll", testcase_name);
     let _ = module.print_to_file(filepath.clone());
