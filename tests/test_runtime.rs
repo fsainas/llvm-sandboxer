@@ -200,21 +200,3 @@ fn test_instrument_phi_0() {
 
     assert_eq!(output.status.code(), Some(0));
 }
-
-#[test]
-fn test_instrument_benchmark_1() {
-    let ll_filepath = instrument_testcase("benchmark_1");
-    let filepath = compile_ll(&ll_filepath);
-
-
-    println!("{}", filepath);
-    assert_eq!(true, false);
-    /*
-    let output = Command::new(filepath.clone())
-        .output()
-        .expect(&format!("Cannot execute {}", filepath));
-
-    println!("{:?}", output);
-    assert_eq!(output.status.code(), Some(0));
-     */
-}
