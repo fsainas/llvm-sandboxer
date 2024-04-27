@@ -192,7 +192,8 @@ fn _update_phi(
     phi_bb: BasicBlock,
     instr: &InstructionValue, 
     previous_bb_name: &str, 
-    continue_block: &BasicBlock) {
+    continue_block: &BasicBlock,
+    phi_counter: &u32) {
 
     if instr.get_opcode() != Phi {
         panic!("Instruction is not Phi!");
@@ -218,7 +219,6 @@ fn _update_phi(
         builder.position_at(phi_bb, instr);
 
         // TODO: expect msg
-        // TODO: change the name to a non-ambiguous one e.g. phi+counter
         let phi_type = match instr.get_type() {
             ArrayType(t) => BasicTypeEnum::ArrayType(t),
             FloatType(t) => BasicTypeEnum::FloatType(t),
@@ -229,7 +229,8 @@ fn _update_phi(
             other_type => panic!("Expected BasicType, found {}", other_type),
         };
 
-        let new_phi: PhiValue = builder.build_phi(phi_type, "phi").expect("REASON");
+        let phi_name = format!("phi{}", phi_counter);
+        let new_phi: PhiValue = builder.build_phi(phi_type, &phi_name).expect("REASON");
 
         // Iterate over the entries of the old phi instructions to build the new one
         for entry in entries {
@@ -276,7 +277,12 @@ fn _update_phi(
 /// there is a phi instruction in this target blocks, we should update the
 /// predecessors.
 // TODO: Build tests for this function
-fn _check_phi(context: &Context, function: &FunctionValue, continue_block: &BasicBlock, previous_bb_name: &str) {
+fn _check_phi(
+    context: &Context, 
+    function: &FunctionValue, 
+    continue_block: &BasicBlock, 
+    previous_bb_name: &str, 
+    phi_counter: &u32) {
 
     // Look for branch instructions
     for instr in continue_block.get_instructions() {
@@ -292,7 +298,7 @@ fn _check_phi(context: &Context, function: &FunctionValue, continue_block: &Basi
 
                 if instr_1.get_opcode() == Phi {
 
-                    _update_phi(context, function, bb_1, &instr_1, previous_bb_name, continue_block);
+                    _update_phi(context, function, bb_1, &instr_1, previous_bb_name, continue_block, phi_counter);
 
                 }
 
@@ -307,7 +313,7 @@ fn _check_phi(context: &Context, function: &FunctionValue, continue_block: &Basi
 
                 if instr_2.get_opcode() == Phi {
 
-                    _update_phi(context, function, bb_2, &instr_2, previous_bb_name, continue_block);
+                    _update_phi(context, function, bb_2, &instr_2, previous_bb_name, continue_block, phi_counter);
 
                 }
 
@@ -378,9 +384,12 @@ pub fn instrument<'a>(
     let zero_offset = i64_type.const_int(0, false);
     protected_offset.set_initializer(&zero_offset);
 
-    // counts the number of load and store instructions, to build labels later
-    let mut load_counter = 0;
-    let mut store_counter = 0;
+    // Count the number of load and store instructions, to give names to blocks later
+    let mut load_counter: u32 = 0;
+    let mut store_counter: u32 = 0;
+
+    // Count the number of updated phi instructions, to give names later
+    let mut phi_counter: u32 = 0;
 
     // Iterate over the basic blocks in the function
     for basic_block in function.get_basic_blocks() {
@@ -462,7 +471,7 @@ pub fn instrument<'a>(
                     // Check if there is a branch in the new block.
                     // If there is, check if there are phi instructions
                     // in the target blocks. If there are, update previous blocks.
-                    _check_phi(context, &function,&continue_block, &current_block_name);
+                    _check_phi(context, &function,&continue_block, &current_block_name, &phi_counter);
                     current_block_name = continue_block.get_name().to_str().unwrap().to_string();
                 }
 
@@ -504,7 +513,7 @@ pub fn instrument<'a>(
                     // Check if there is a branch in the new block.
                     // If there is, check if there are phi instructions
                     // in the target blocks. If there are, update previous blocks.
-                    _check_phi(context, &function,&continue_block, &current_block_name);
+                    _check_phi(context, &function,&continue_block, &current_block_name, &phi_counter);
                     current_block_name = continue_block.get_name().to_str().unwrap().to_string();
 
                 }
