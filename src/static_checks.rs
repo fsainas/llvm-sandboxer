@@ -85,13 +85,26 @@ fn _get_type_as_str_size(type_as_str: &str) -> i64 {
 
 }
 
-fn _parse_gep(gep: PointerValue) -> (String, i64, i64) {
+fn _parse_gep(gep: PointerValue) -> Vec<(String, String)> {
 
     let gep_as_llvmstring = gep.print_to_string();
     let gep_as_str: &str = gep_as_llvmstring.to_str().expect("Failed to convert LLVMString to &str.");
 
     // (type, value)
     let mut operands: Vec<(String, String)> = Vec::new();
+
+    // Get type
+    let gep_type_pattern: Regex = Regex::new(r"(\w)+ x (\w)+").unwrap();
+
+    let capture = gep_type_pattern.captures(gep_as_str).unwrap();
+
+    let binding = capture[0].to_string().replace(" x ", " ");
+    let array_type_and_size_as_string: Vec<_> = binding.split_whitespace().collect();
+
+    let array_size= array_type_and_size_as_string[0].to_string();
+    let array_type= array_type_and_size_as_string[1].to_string();
+
+    operands.push((array_size, array_type));
 
     // Pattern to match GEP operands
     let gep_operands_pattern: Regex = Regex::new(r", (\w)+ @?(\w)+").unwrap();
@@ -104,19 +117,7 @@ fn _parse_gep(gep: PointerValue) -> (String, i64, i64) {
         operands.push((parts[0].to_string(), parts[1].to_string()));
     }
 
-    let gep_type_pattern: Regex = Regex::new(r"x (\w)+").unwrap();
-
-    let capture = gep_type_pattern.captures(gep_as_str).unwrap();
-    let ty: String = capture[0].to_string().replace("x ", "");
-    let type_size: i64 = _get_type_as_str_size(&ty);
-
-    // The first operand is the base pointer
-    // Remove the '@'
-    let base_ptr_as_string: String = operands[0].1.replace("@", "");
-
-    let offset: i64 = operands[2].1.parse().unwrap();
-
-    (base_ptr_as_string, offset, type_size)
+    operands
 
 }
 
@@ -155,7 +156,20 @@ fn _is_address_protected(
     if !ptr.is_const() { return false }
 
     // Parse get element pointer and get base pointer, offset and type size
-    let (base_ptr_as_string, offset, size) = _parse_gep(ptr);
+    let gep_operands: Vec<(String, String)> = _parse_gep(ptr);
+
+    let size: i64 = _get_type_as_str_size(&gep_operands[0].1);
+
+    // The first operand is the base pointer
+    // Remove the '@'
+    let base_ptr_as_string: String = gep_operands[1].1.replace("@", "");
+
+    let first_index: i64 = gep_operands[2].1.parse().unwrap();
+
+    // Overflow
+    if first_index > 0 { return  false }
+
+    let offset: i64 = gep_operands[3].1.parse().unwrap();
 
     // Get base pointer from base pointer string
     let base_ptr: PointerValue = match module.get_global(&base_ptr_as_string.as_str()) {
