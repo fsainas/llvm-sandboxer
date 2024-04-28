@@ -1,12 +1,53 @@
+//! Provides static checks for protected memory addresses.
+//!
+//! This module offers functions to verify and enforce memory access safety
+//! within LLVM IR functions.  It includes methods to remove utxs function calls
+//! and verify memory accesses against protected addresses.
+//!
+//! # Example
+//!
+//! ```rust
+//! use inkwell::context::Context;
+//! use inkwell::module::Module;
+//! use inkwell::values::{FunctionValue, PointerValue};
+//! use llvm_sandboxer::static_checks::{remove_function_call, verify};
+//!
+//! fn main() {
+//!     // Initialize LLVM context and module
+//!     let context = Context::create();
+//!     let module = context.create_module("example");
+//!
+//!     // Define a sample function and add it to the module
+//!     let function = module.add_function(
+//!         "example_function",
+//!         context.i64_type().fn_type(&[], false),
+//!         None,
+//!     );
+//!
+//!     // Perform static checks on the module
+//!     let checks_passed = verify(module, function);
+//!     if checks_passed {
+//!         println!("Memory access checks passed.");
+//!     } else {
+//!         println!("Memory access checks failed.");
+//!     }
+//! }
+//! ```
+
 use inkwell::module::Module;
-use inkwell::values::FunctionValue;
-use inkwell::context::Context;
+use inkwell::values::{AnyValue, FunctionValue};
 use inkwell::values::PointerValue;
 use inkwell::values::BasicValueEnum::{PointerValue as PV, IntValue as IV};
 use inkwell::values::InstructionOpcode::{Call, Load, Store};
-use inkwell::IntPredicate::SLE;
+use regex::Regex;
 
-/// Removes a function call in the body of an LLVM IR function
+/// Removes a specific function call from the body of an LLVM IR function.
+///
+/// # Arguments
+///
+/// * `module` - A reference to the LLVM module containing the function.
+/// * `caller_name` - The name of the function from which to remove the call.
+/// * `callee_name` - The name of the function call to remove.
 pub fn remove_function_call(module: &Module, caller_name: &str, callee_name: &str) {
 
     let function = module.get_function(caller_name).unwrap();
@@ -35,53 +76,118 @@ pub fn remove_function_call(module: &Module, caller_name: &str, callee_name: &st
 
 }
 
-/// Checks if a given PointerValue is contained within a vector of protected PointerValues.
+fn _get_type_as_str_size(type_as_str: &str) -> i64 {
+
+    match type_as_str {
+        "i64" => 8,
+        other => panic!("Expected type, found {}", other)
+    }
+
+}
+
+fn _parse_gep(gep: PointerValue) -> (String, i64, i64) {
+
+    let gep_as_llvmstring = gep.print_to_string();
+    let gep_as_str: &str = gep_as_llvmstring.to_str().expect("Failed to convert LLVMString to &str.");
+
+    // (type, value)
+    let mut operands: Vec<(String, String)> = Vec::new();
+
+    // Pattern to match GEP operands
+    let gep_operands_pattern: Regex = Regex::new(r", (\w)+ @?(\w)+").unwrap();
+
+    for capture in gep_operands_pattern.captures_iter(gep_as_str) {
+
+        let binding: String = capture[0].to_string().replace(",", "");
+        let parts: Vec<_> = binding.split_whitespace().collect();
+
+        operands.push((parts[0].to_string(), parts[1].to_string()));
+    }
+
+    let gep_type_pattern: Regex = Regex::new(r"x (\w)+").unwrap();
+
+    let capture = gep_type_pattern.captures(gep_as_str).unwrap();
+    let ty: String = capture[0].to_string().replace("x ", "");
+    let type_size: i64 = _get_type_as_str_size(&ty);
+
+    // The first operand is the base pointer
+    // Remove the '@'
+    let base_ptr_as_string: String = operands[0].1.replace("@", "");
+
+    let offset: i64 = operands[2].1.parse().unwrap();
+
+    (base_ptr_as_string, offset, type_size)
+
+}
+
+/// Checks if a given pointer value is in a protected range.
+///
+/// This function compares the provided pointer value against a protected memory address and offset.
+/// If the pointer value matches the protected address and the offset is within the protected range,
+/// the function returns true, indicating that the memory access is protected.
+///
+/// # Arguments
+///
+/// * `module` - The LLVM module containing the global variables.
+/// * `protected_mem` - A tuple containing the protected memory address and offset.
+/// * `ptr` - The pointer value to check for protection.
+/// * `alignment` - The alignment associated with the pointer value.
+///
+/// # Returns
+///
+/// Returns true if the pointer value is protected, false otherwise.
 fn _is_address_protected(
+    module: Module,
     protected_mem: &(Option<PointerValue>, Option<u64>), 
     ptr: PointerValue, 
-    offset: u64) -> bool {
+    alignment: u64) -> bool {
 
     let (Some(protected_ptr), Some(protected_offset)) = *protected_mem else { return false; };
 
     // Protected pointer and pointer accessed are the same
-    if protected_ptr == ptr && protected_offset >= offset {
+    if protected_ptr == ptr && protected_offset >= alignment {
 
         return true;
 
-    } else {
+    } 
 
-        let context = Context::create();
-        let i64_type = context.i64_type();
+    // If the pointer is not constant, the value cannot be computed statically
+    if !ptr.is_const() { return false }
 
-        unsafe {
+    // Parse get element pointer and get base pointer, offset and type size
+    let (base_ptr_as_string, offset, size) = _parse_gep(ptr);
 
-            // Cast offset to IntValue
-            let protected_offset_as_int_value = i64_type.const_int(protected_offset, false);
-            // Compute the last protected address (protected_ptr + offset)
-            let last_protected_ptr = protected_ptr.const_gep(i64_type, &[protected_offset_as_int_value]); 
+    // Get base pointer from base pointer string
+    let base_ptr: PointerValue = match module.get_global(&base_ptr_as_string.as_str()) {
+        Some(global_val) => global_val.as_pointer_value(),
+        None => todo!()
+    };
 
-            // Cast protected_ptr to IntValue
-            let protected_ptr_as_int_value = protected_ptr.const_to_int(i64_type);
-            let last_protected_ptr_as_int_value = last_protected_ptr.const_to_int(i64_type);
-            let ptr_as_int_value = ptr.const_to_int(i64_type);
-            println!("PTR: {:?}", protected_ptr_as_int_value);
-            println!("LAST PTR: {:?}", last_protected_ptr_as_int_value);
+    // Check if the base pointer is protected and if the accessed pointer is inside the protected range
+    if protected_ptr.print_to_string() == base_ptr.print_to_string() && (protected_offset as i64) >= offset * size {
 
-            // Check if ptr points inside the range [protected_ptr, last_protected_pointer]
-            let res = protected_ptr_as_int_value.const_int_compare(SLE, ptr_as_int_value).get_sign_extended_constant();
-            println!("RES: {:?}", res);
-
-            // TODO
-        }
+        return true;
 
     }
 
     false // No match found, return false
 }
 
-/// Statically verifies that the memory accesses of a function are safe
-/// Looks for `utx1` functions to protect addresses and checks `load` and `store`.
-pub fn verify(function: FunctionValue) -> bool {
+/// Statically verifies that memory accesses within a function are safe.
+///
+/// This function iterates over the instructions in a function's basic blocks,
+/// checking for load and store operations. It ensures that memory accesses
+/// do not violate protected memory addresses.
+///
+/// # Arguments
+///
+/// * `module` - The LLVM module containing the function.
+/// * `function` - The LLVM IR function to verify.
+///
+/// # Returns
+///
+/// Returns `true` if memory access checks pass, `false` otherwise.
+pub fn verify(module: Module, function: FunctionValue) -> bool {
 
     // Keeps track of protected memory addresses
     // (pointer, offset)
@@ -128,7 +234,7 @@ pub fn verify(function: FunctionValue) -> bool {
                         other => panic!("Expected PointerValue, found {:?}", other)
                     };
 
-                    if !_is_address_protected(&protected_mem, ptr, alignment as u64) {
+                    if !_is_address_protected(module.clone(), &protected_mem, ptr, alignment as u64) {
                         return false;
                     }
 
@@ -144,7 +250,7 @@ pub fn verify(function: FunctionValue) -> bool {
                         other => panic!("Expected PointerValue, found {:?}", other)
                     };
 
-                    if !_is_address_protected(&protected_mem, ptr, alignment as u64) {
+                    if !_is_address_protected(module.clone(), &protected_mem, ptr, alignment as u64) {
                         return false;
                     }
 
