@@ -35,7 +35,7 @@
 //! ```
 
 use inkwell::module::Module;
-use inkwell::values::{AnyValue, FunctionValue};
+use inkwell::values::{AnyValue, FunctionValue, InstructionValue};
 use inkwell::values::PointerValue;
 use inkwell::values::BasicValueEnum::{PointerValue as PV, IntValue as IV};
 use inkwell::values::InstructionOpcode::{Call, Load, Store};
@@ -137,7 +137,7 @@ fn _parse_gep(gep: PointerValue) -> Vec<(String, String)> {
 /// # Returns
 ///
 /// Returns true if the pointer value is protected, false otherwise.
-fn _is_address_protected(
+pub fn is_address_protected(
     module: Module,
     protected_mem: &(Option<PointerValue>, Option<u64>), 
     ptr: PointerValue, 
@@ -187,6 +187,29 @@ fn _is_address_protected(
     false // No match found, return false
 }
 
+pub fn handle_utx1(instr: InstructionValue) -> (PointerValue, u64) {
+
+    if instr.get_opcode() != Call {
+        panic!("Instruction is not a Call.");
+    }
+
+    // Extract pointer value and offset to protect
+    let ptr: PointerValue = match instr.get_operand(0).unwrap().unwrap_left() {
+        PV(ptr) => ptr,
+        other => panic!("Expected PointerValue, found {:?}", other),
+    };
+
+    let offset = match instr.get_operand(1).unwrap().unwrap_left() {
+        IV(offset) => offset,
+        other => panic!("Expected IntValue, found {:?}", other),
+    };
+
+    let offset_as_u64 = offset.get_zero_extended_constant().expect("Failed to get offset.");
+
+    (ptr, offset_as_u64)
+
+}
+
 /// Statically verifies that memory accesses within a function are safe.
 ///
 /// This function iterates over the instructions in a function's basic blocks,
@@ -220,19 +243,9 @@ pub fn verify(module: Module, function: FunctionValue) -> bool {
                     // Check if it is the call to `utx1`
                     if instr.to_string().contains("utx1") {         // Not sure if this is safe
 
-                        // Extract pointer value and offset to protect
-                        let ptr: PointerValue = match instr.get_operand(0).unwrap().unwrap_left() {
-                            PV(ptr) => ptr,
-                            other => panic!("Expected PointerValue, found {:?}", other),
-                        };
+                        let (ptr, offset) = handle_utx1(instr);
 
-                        let offset = match instr.get_operand(1).unwrap().unwrap_left() {
-                            IV(offset) => offset,
-                            other => panic!("Expected IntValue, found {:?}", other),
-                        };
-
-                        let Some(offset_as_u64) = offset.get_zero_extended_constant() else { todo!() };
-                        protected_mem = (Some(ptr), Some(offset_as_u64));
+                        protected_mem = (Some(ptr), Some(offset));
 
                     }
                 
@@ -248,7 +261,7 @@ pub fn verify(module: Module, function: FunctionValue) -> bool {
                         other => panic!("Expected PointerValue, found {:?}", other)
                     };
 
-                    if !_is_address_protected(module.clone(), &protected_mem, ptr, alignment as u64) {
+                    if !is_address_protected(module.clone(), &protected_mem, ptr, alignment as u64) {
                         return false;
                     }
 
@@ -264,7 +277,7 @@ pub fn verify(module: Module, function: FunctionValue) -> bool {
                         other => panic!("Expected PointerValue, found {:?}", other)
                     };
 
-                    if !_is_address_protected(module.clone(), &protected_mem, ptr, alignment as u64) {
+                    if !is_address_protected(module.clone(), &protected_mem, ptr, alignment as u64) {
                         return false;
                     }
 

@@ -12,6 +12,7 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::values::{BasicValueEnum, GlobalValue, InstructionValue, FunctionValue};
 use inkwell::values::{IntValue, PointerValue, PhiValue};
+use inkwell::values::BasicValueEnum::PointerValue as PV;
 use inkwell::IntPredicate::*;
 use inkwell::values::AnyValue;
 use inkwell::types::AnyTypeEnum::{ArrayType, FloatType, IntType, PointerType, StructType, VectorType};
@@ -21,9 +22,10 @@ extern crate llvm_sys as llvm;
 
 use regex::Regex;
 
-
 // Instruction opcodes
 use inkwell::values::InstructionOpcode::{Call, Load, Store, Phi, Br};
+
+use crate::static_checks;
 
 /// Moves an instruction `instr` and the following ones to a new block `to_block`
 fn _move_instructions(context: &Context, instr: &InstructionValue, to_block: &BasicBlock) {
@@ -411,7 +413,8 @@ fn _handle_store_or_load(
 pub fn instrument<'a>(
     function_name: &str, 
     context: &'a Context, 
-    module: &Module<'a>) -> Result<(), String> {
+    module: &Module<'a>,
+    static_analysis: bool) -> Result<(), String> {
 
     // Retrieve function value
     let function = module.get_function(function_name).unwrap();
@@ -467,6 +470,9 @@ pub fn instrument<'a>(
     let zero_offset = i64_type.const_int(0, false);
     protected_offset.set_initializer(&zero_offset);
 
+    // * Internal state for static analysis * //
+    let mut protected_mem_static: (Option<PointerValue>, Option<u64>) = (None, None);
+
     // Count the number of load and store instructions, to give names to blocks later
     let mut load_counter: u32 = 0;
     let mut store_counter: u32 = 0;
@@ -509,6 +515,10 @@ pub fn instrument<'a>(
                         builder.build_store(protected_offset.as_pointer_value(), offset)
                             .map_err(|e| format!("Failed to store protected offset value: {:?}", e))?;
 
+                        if static_analysis {
+                            let (ptr, offset) = static_checks::handle_utx1(instr);
+                            protected_mem_static = (Some(ptr), Some(offset));
+                        }
 
                         // remove utx1 call
                         instr.erase_from_basic_block();
@@ -522,6 +532,22 @@ pub fn instrument<'a>(
                     // Create the block to store the rest of the code
                     let new_bb_name = format!("load{}", load_counter);
                     load_counter += 1;
+                    
+                    if static_analysis {
+
+                        let alignment: u32 = instr.get_alignment()
+                        .expect(&format!("Failed to get the alignment of instruction {:?}", instr));
+
+                        let ptr: PointerValue = match instr.get_operand(0).unwrap().unwrap_left() { 
+                            PV(ptr) => ptr,
+                            other => panic!("Expected PointerValue, found {:?}", other)
+                        };
+
+                        if static_checks::is_address_protected(module.clone(), &protected_mem_static, ptr, alignment as u64) {
+                            continue;
+                        }
+
+                    }
 
                     _handle_store_or_load(
                         context, 
@@ -541,6 +567,22 @@ pub fn instrument<'a>(
                     // Create the block to store the rest of the code
                     let new_bb_name: String = format!("store{}", store_counter);
                     store_counter += 1;
+
+                    if static_analysis {
+
+                        let alignment: u32 = instr.get_alignment()
+                        .expect(&format!("Failed to get the alignment of instruction {:?}", instr));
+
+                        let ptr: PointerValue = match instr.get_operand(1).unwrap().unwrap_left() { 
+                            PV(ptr) => ptr,
+                            other => panic!("Expected PointerValue, found {:?}", other)
+                        };
+
+                        if static_checks::is_address_protected(module.clone(), &protected_mem_static, ptr, alignment as u64) {
+                            continue;
+                        }
+
+                    }
 
                     _handle_store_or_load(
                         context, 
