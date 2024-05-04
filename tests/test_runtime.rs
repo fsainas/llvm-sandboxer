@@ -16,8 +16,8 @@ fn compile_c_files() {
         .expect("Failed to compile C source file.");
 }
 
-/// Compile instrumented LLVMs to bitcode
-fn compile_ll(filepath: &str) -> String {
+/// Compile instrumented LLVMs to executable
+fn compile_ll_to_exec(filepath: &str) -> String {
     let filepath = Path::new(filepath);
     let exec_filepath = filepath.with_extension("o");
 
@@ -27,7 +27,7 @@ fn compile_ll(filepath: &str) -> String {
         .arg("-o")
         .arg(exec_filepath.clone())
         .output()
-        .expect("Failed to compile LLVMs to bitcode.");
+        .expect("Failed to compile LLVMs to executable.");
 
     println!("{:?}", output);
 
@@ -50,14 +50,13 @@ fn instrument_testcase(testcase_name: &str) -> String {
     let context = Context::create();
     let module = Module::parse_bitcode_from_path(&bitcode_path, &context).unwrap();
 
-    if let Err(err) = runtime::instrument(testcase_name, &context, &module) {
-        println!("Error occurred: {:?}", err);
-    } else {
-        println!("Instrumentation completed successfully");
+    match runtime::instrument(testcase_name, &context, &module, true) {
+        Ok(()) => println!("Instrumentation completed successfully"),
+        Err(err) => println!("Error occurred: {:?}", err)
     }
 
     // Save to file
-    let filepath = format!("target/tests/instrumented/{}_instr.ll", testcase_name);
+    let filepath = format!("target/tests/instrumented/{}_instrumented.ll", testcase_name);
     let _ = module.print_to_file(filepath.clone());
 
     return filepath
@@ -67,133 +66,151 @@ fn instrument_testcase(testcase_name: &str) -> String {
 // `cargo test <test name>`.
 #[test]
 fn test_instrument_bad_entry_0() {
-    let ll_filepath = instrument_testcase("bad_entry_0");
-    let filepath = compile_ll(&ll_filepath);
+    let test_case_name = "bad_entry_0";
+    let ll_filepath = instrument_testcase(test_case_name);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}.", filepath));
 
-    // None exit status if abort
+    // Check that it crashes
     assert_eq!(output.status.code(), None);
 }
 
 #[test]
 fn test_instrument_bad_entry_1() {
     let ll_filepath = instrument_testcase("bad_entry_1");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}.", filepath));
 
-    // None exit status if abort
+    // Check that it crashes
     assert_eq!(output.status.code(), None);
 }
 
 #[test]
 fn test_instrument_bad_entry_2() {
     let ll_filepath = instrument_testcase("bad_entry_2");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}.", filepath));
 
-    // None exit status if abort
+    // Check that it crashes
     assert_eq!(output.status.code(), None);
 }
 
 #[test]
 fn test_instrument_bad_entry_3() {
     let ll_filepath = instrument_testcase("bad_entry_3");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}.", filepath));
 
-    // None exit status if abort
+    // Check that it crashes
     assert_eq!(output.status.code(), None);
 }
 
 #[test]
 fn test_instrument_good_entry_0() {
     let ll_filepath = instrument_testcase("good_entry_0");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}.", filepath));
 
+    // Check that it doesn't crash
     assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]
 fn test_instrument_good_entry_1() {
     let ll_filepath = instrument_testcase("good_entry_1");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}.", filepath));
 
+    // Check that it doesn't crash
     assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]
 fn test_instrument_good_entry_2() {
     let ll_filepath = instrument_testcase("good_entry_2");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}.", filepath));
 
+    // Check that it doesn't crash
     assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]
 fn test_instrument_good_entry_3() {
     let ll_filepath = instrument_testcase("good_entry_3");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}", filepath));
 
+    // Check that it doesn't crash
     assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]
 fn test_instrument_good_entry_4() {
     let ll_filepath = instrument_testcase("good_entry_4");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}", filepath));
 
+    // Check that it doesn't crash
     assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]
 fn test_instrument_good_entry_5() {
     let ll_filepath = instrument_testcase("good_entry_5");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}", filepath));
 
+    // Check that it doesn't crash
     assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]
 fn test_instrument_phi_0() {
     let ll_filepath = instrument_testcase("phi_0");
-    let filepath = compile_ll(&ll_filepath);
+    let filepath = compile_ll_to_exec(&ll_filepath);
 
+    // Execute the instrumented testcase
     let output = Command::new(filepath.clone())
         .output()
         .expect(&format!("Cannot execute {}", filepath));
