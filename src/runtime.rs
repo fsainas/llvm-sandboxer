@@ -270,7 +270,7 @@ fn _update_phi(
         }
 
         instr.replace_all_uses_with(&new_phi.as_instruction());
-        instr.remove_from_basic_block();
+        instr.erase_from_basic_block();
             
     }
 
