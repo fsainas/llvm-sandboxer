@@ -72,8 +72,16 @@ fn _build_check(
         &format!("protected_ptr_{}", block_name),
         ) {
         Ok(value) => value.into_pointer_value(),
-        Err(_) => return Err("Failed to load value for 'protected_offset_val'".to_string()),
+        Err(_) => return Err("Failed to load value for 'protected_val'".to_string()),
     };
+
+    let protected_ptr_val_as_int = match builder.build_ptr_to_int(
+        protected_ptr_val, 
+        i64_type, 
+        &format!("protected_ptr_{}_as_int", block_name)) {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to cast pointer to int".to_string()),
+        };
 
     // Check if @protected_ptr is null
     let null_ptr = context.i8_type().ptr_type(inkwell::AddressSpace::default()).const_null();
@@ -102,51 +110,55 @@ fn _build_check(
         Err(_) => return Err("Failed to load value for 'protected_offset_val'".to_string()),
     };
 
-    unsafe {
+    let last_protected_ptr_val = match builder.build_int_add(
+        protected_ptr_val_as_int,
+        protected_offset_val, 
+        &format!("last_protected_ptr_{}", block_name)) {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to build last_protected_ptr_val calculation.".to_string()),
+    };
 
-        // Perform pointer arithmetic for last protected pointer value
-        let last_protected_ptr_val = builder.build_gep(
-            ptr_type, 
-            protected_ptr_val, 
-            &[protected_offset_val], 
-            &format!("last_protected_ptr_{}", block_name)
-            ).map_err(|e| format!("Failed to build pointer arithmetic for 'last_protected_ptr_val': {:?}", e))?;
+    let accessed_ptr_val_as_int = match builder.build_ptr_to_int(
+        accessed_ptr_val, 
+        i64_type, 
+        &format!("accessed_ptr_{}_as_int", block_name)) {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to cast pointer to int".to_string()),
+        };
 
-        // Perform pointer arithmetic for last accessed pointer value
-        let last_accessed_ptr_val = builder.build_gep(
-            ptr_type, 
-            accessed_ptr_val, 
-            &[alignment_as_int_value], 
-            &format!("last_accessed_ptr_{}", block_name)
-            ).map_err(|e| format!("Failed to build pointer arithmetic for 'last_accessed_ptr_val': {:?}", e))?;
+    let last_accessed_ptr_val_as_int = match builder.build_int_add(
+        accessed_ptr_val_as_int,
+        alignment_as_int_value, 
+        &format!("last_accessed_ptr_{}", block_name)) {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to build last_protected_ptr_val calculation.".to_string()),
+    };
 
-        // Compare last accessed pointer value with last protected pointer value
-        let last_acc_gt_last_prot = builder.build_int_compare(
-            SGT, 
-            last_accessed_ptr_val, 
-            last_protected_ptr_val, 
-            &format!("last_acc_gt_last_prot_{}", block_name)
-            ).map_err(|e| format!("Failed to build integer comparison for 'last_accessed_ptr_val' > 'last_protected_ptr_val': {:?}", e))?;
+    // Compare last accessed pointer value with last protected pointer value
+    let last_acc_gt_last_prot = builder.build_int_compare(
+        SGT, 
+        last_accessed_ptr_val_as_int, 
+        last_protected_ptr_val,
+        &format!("last_acc_gt_last_prot_{}", block_name)
+        ).map_err(|e| format!("Failed to build integer comparison for 'last_accessed_ptr_val' > 'last_protected_ptr_val': {:?}", e))?;
 
-        // Build logical OR operation for checks
-        let check_range = builder.build_or(
-            accessed_lt_protected, 
-            last_acc_gt_last_prot, 
-            &format!("check_range_{}", block_name)
-            ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
+    // Build logical OR operation for checks
+    let check_range = builder.build_or(
+        accessed_lt_protected, 
+        last_acc_gt_last_prot, 
+        &format!("check_range_{}", block_name)
+        ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
 
-        // Build logical OR operation for checks
-        let check = builder.build_or(
-            protected_is_null, 
-            check_range, 
-            &format!("check_{}", block_name)
-            ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
+    // Build logical OR operation for checks
+    let check = builder.build_or(
+        protected_is_null, 
+        check_range, 
+        &format!("check_{}", block_name)
+        ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
 
-        // Create the instruction that evaluates comparison and chooses to abort or continue
-        builder.build_conditional_branch(check, *abort_block, continue_block)
-            .map_err(|e| format!("Failed to build conditional branch: {:?}", e))?;
-
-    }
+    // Create the instruction that evaluates comparison and chooses to abort or continue
+    builder.build_conditional_branch(check, *abort_block, continue_block)
+        .map_err(|e| format!("Failed to build conditional branch: {:?}", e))?;
 
     Ok(())
 }
