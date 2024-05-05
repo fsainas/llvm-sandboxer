@@ -122,6 +122,48 @@ fn test_instrument_bad_entry_3() {
 }
 
 #[test]
+fn test_instrument_bad_entry_4() {
+    let ll_filepath = instrument_testcase("bad_entry_4");
+    let filepath = compile_ll_to_exec(&ll_filepath);
+
+    // Execute the instrumented testcase
+    let output = Command::new(filepath.clone())
+        .output()
+        .expect(&format!("Cannot execute {}.", filepath));
+
+    // Check that it crashes
+    assert_eq!(output.status.code(), None);
+}
+
+#[test]
+fn test_instrument_bad_entry_5() {
+    let ll_filepath = instrument_testcase("bad_entry_5");
+    let filepath = compile_ll_to_exec(&ll_filepath);
+
+    // Execute the instrumented testcase
+    let output = Command::new(filepath.clone())
+        .output()
+        .expect(&format!("Cannot execute {}.", filepath));
+
+    // Check that it crashes
+    assert_eq!(output.status.code(), None);
+}
+
+#[test]
+fn test_instrument_bad_entry_6() {
+    let ll_filepath = instrument_testcase("bad_entry_6");
+    let filepath = compile_ll_to_exec(&ll_filepath);
+
+    // Execute the instrumented testcase
+    let output = Command::new(filepath.clone())
+        .output()
+        .expect(&format!("Cannot execute {}.", filepath));
+
+    // Check that it crashes
+    assert_eq!(output.status.code(), None);
+}
+
+#[test]
 fn test_instrument_good_entry_0() {
     let ll_filepath = instrument_testcase("good_entry_0");
     let filepath = compile_ll_to_exec(&ll_filepath);
@@ -194,6 +236,34 @@ fn test_instrument_good_entry_4() {
 #[test]
 fn test_instrument_good_entry_5() {
     let ll_filepath = instrument_testcase("good_entry_5");
+    let filepath = compile_ll_to_exec(&ll_filepath);
+
+    // Execute the instrumented testcase
+    let output = Command::new(filepath.clone())
+        .output()
+        .expect(&format!("Cannot execute {}", filepath));
+
+    // Check that it doesn't crash
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
+fn test_instrument_good_entry_6() {
+    let ll_filepath = instrument_testcase("good_entry_6");
+    let filepath = compile_ll_to_exec(&ll_filepath);
+
+    // Execute the instrumented testcase
+    let output = Command::new(filepath.clone())
+        .output()
+        .expect(&format!("Cannot execute {}", filepath));
+
+    // Check that it doesn't crash
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
+fn test_instrument_good_entry_7() {
+    let ll_filepath = instrument_testcase("good_entry_7");
     let filepath = compile_ll_to_exec(&ll_filepath);
 
     // Execute the instrumented testcase

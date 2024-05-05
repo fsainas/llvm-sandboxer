@@ -57,6 +57,11 @@ fn test_bad_entry_4() {
 }
 
 #[test]
+fn test_bad_entry_5() {
+    assert_eq!(verify_testcase("bad_entry_5"), false);
+}
+
+#[test]
 fn test_good_entry_0() {
     assert_eq!(verify_testcase("good_entry_0"), true);
 }
@@ -93,4 +98,9 @@ fn test_good_entry_5() {
 #[test]
 fn test_good_entry_6() {
     assert_eq!(verify_testcase("good_entry_6"), true);
+}
+
+#[test]
+fn test_good_entry_7() {
+    assert_eq!(verify_testcase("good_entry_7"), true);
 }
