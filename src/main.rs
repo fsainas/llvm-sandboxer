@@ -25,10 +25,9 @@ fn main() {
     // Parse LLVM
     let module = Module::parse_bitcode_from_path(path, &context).unwrap();
 
-    if let Err(err) = runtime::instrument(function_name, &context, &module) {
-        println!("Error occurred: {:?}", err);
-    } else {
-        println!("Instrumentation completed successfully");
+    match runtime::instrument(function_name, &context, &module, true) {
+        Ok(()) => println!("Instrumentation completed successfully"),
+        Err(err) => println!("Error occurred: {:?}", err)
     }
 
     match module.verify() {
@@ -36,7 +35,4 @@ fn main() {
         Err(e) => println!("{}", e.to_string())
     }
 
-    // Save to file
-    let _ = module.print_to_file("result.ll");
-    
 }
