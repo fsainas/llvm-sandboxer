@@ -69,36 +69,31 @@ fn _build_check(
     let protected_ptr_val: PointerValue = match builder.build_load(
         ptr_type,
         protected_ptr.as_pointer_value(),
-        &format!("protected_ptr_{}", block_name),
-        ) {
+        &format!("protected_ptr_{}", block_name),) {
         Ok(value) => value.into_pointer_value(),
-        Err(_) => return Err("Failed to load value for 'protected_val'".to_string()),
+        Err(_) => return Err("Failed to build load from @protected_val".to_string()),
     };
-
-    let protected_ptr_val_as_int = match builder.build_ptr_to_int(
-        protected_ptr_val, 
-        i64_type, 
-        &format!("protected_ptr_{}_as_int", block_name)) {
-        Ok(value) => value,
-        Err(_) => return Err("Failed to cast pointer to int".to_string()),
-        };
 
     // Check if @protected_ptr is null
     let null_ptr = context.i8_type().ptr_type(inkwell::AddressSpace::default()).const_null();
-    let protected_is_null = builder.build_int_compare(
+    let protected_is_null = match builder.build_int_compare(
         EQ, 
         protected_ptr_val, 
         null_ptr,
-        &format!("protected_is_null_{}", block_name)
-        ).map_err(|e| format!("Failed to build integer comparison for 'accessed_ptr_val' < 'protected_ptr_val': {:?}", e))?;
+        &format!("protected_is_null_{}", block_name)) {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to build check for null protected pointer".to_string())
+    };
 
     // Compare accessed pointer value with protected pointer value
-    let accessed_lt_protected = builder.build_int_compare(
+    let accessed_lt_protected = match builder.build_int_compare(
         SLT, 
         accessed_ptr_val, 
         protected_ptr_val, 
-        &format!("accessed_lt_protected_{}", block_name)
-        ).map_err(|e| format!("Failed to build integer comparison for 'accessed_ptr_val' < 'protected_ptr_val': {:?}", e))?;
+        &format!("accessed_lt_protected_{}", block_name)) {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to build integer comparison for 'accessed_ptr_val' < 'protected_ptr_val'".to_string())
+    };
 
     // Load protected offset value
     let protected_offset_val = match builder.build_load(
@@ -110,6 +105,16 @@ fn _build_check(
         Err(_) => return Err("Failed to load value for 'protected_offset_val'".to_string()),
     };
 
+    // Convert protected pointer to int to compute the last protected pointer
+    let protected_ptr_val_as_int = match builder.build_ptr_to_int(
+        protected_ptr_val, 
+        i64_type, 
+        &format!("protected_ptr_as_int{}", block_name)) {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to convert @protected_ptr to int".to_string()),
+    };
+
+    // Compute last protected pointer
     let last_protected_ptr_val = match builder.build_int_add(
         protected_ptr_val_as_int,
         protected_offset_val, 
@@ -118,49 +123,58 @@ fn _build_check(
         Err(_) => return Err("Failed to build last_protected_ptr_val calculation.".to_string()),
     };
 
+    // Convert accessed pointer to int to compute the last accessed pointer
     let accessed_ptr_val_as_int = match builder.build_ptr_to_int(
         accessed_ptr_val, 
         i64_type, 
-        &format!("accessed_ptr_{}_as_int", block_name)) {
+        &format!("accessed_ptr_as_int{}", block_name)) {
         Ok(value) => value,
         Err(_) => return Err("Failed to cast pointer to int".to_string()),
-        };
+    };
 
+    // Compute last accessed pointer
     let last_accessed_ptr_val_as_int = match builder.build_int_add(
         accessed_ptr_val_as_int,
         alignment_as_int_value, 
-        &format!("last_accessed_ptr_{}", block_name)) {
+        &format!("last_accessed_ptr_as_int{}", block_name)) {
         Ok(value) => value,
         Err(_) => return Err("Failed to build last_protected_ptr_val calculation.".to_string()),
     };
 
     // Compare last accessed pointer value with last protected pointer value
-    let last_acc_gt_last_prot = builder.build_int_compare(
+    let last_acc_gt_last_prot = match builder.build_int_compare(
         SGT, 
         last_accessed_ptr_val_as_int, 
         last_protected_ptr_val,
-        &format!("last_acc_gt_last_prot_{}", block_name)
-        ).map_err(|e| format!("Failed to build integer comparison for 'last_accessed_ptr_val' > 'last_protected_ptr_val': {:?}", e))?;
+        &format!("last_acc_gt_last_prot_{}", block_name)) {
+            Ok(value) => value,
+            Err(_) => return Err("Failed to build integer comparison for 'last_accessed_ptr_val' > 'last_protected_ptr_val'".to_string())
+    };
 
     // Build logical OR operation for checks
-    let check_range = builder.build_or(
+    let check_range = match builder.build_or(
         accessed_lt_protected, 
         last_acc_gt_last_prot, 
-        &format!("check_range_{}", block_name)
-        ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
+        &format!("check_range_{}", block_name)) {
+            Ok(value) => value,
+            Err(_) => return Err("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot'".to_string())
+    };
 
     // Build logical OR operation for checks
-    let check = builder.build_or(
+    let check = match builder.build_or(
         protected_is_null, 
         check_range, 
-        &format!("check_{}", block_name)
-        ).map_err(|e| format!("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot': {:?}", e))?;
+        &format!("check_{}", block_name)) {
+            Ok(value) => value,
+            Err(_) => return Err("Failed to build logical OR operation for 'accessed_lt_protected' || 'last_acc_gt_last_prot'".to_string())
+    };
 
     // Create the instruction that evaluates comparison and chooses to abort or continue
-    builder.build_conditional_branch(check, *abort_block, continue_block)
-        .map_err(|e| format!("Failed to build conditional branch: {:?}", e))?;
+    match builder.build_conditional_branch(check, *abort_block, continue_block) {
+        Ok(_) => Ok(()),
+        Err(e) => return Err(format!("Failed to build conditional branch: {:?}", e))
+    }
 
-    Ok(())
 }
 
 
