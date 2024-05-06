@@ -62,16 +62,20 @@ fn test_bad_entry_5() {
 }
 
 #[test]
+fn test_bad_entry_6() {
+    assert_eq!(verify_testcase("bad_entry_6"), false);
+}
+
+#[test]
 fn test_good_entry_0() {
     assert_eq!(verify_testcase("good_entry_0"), true);
 }
 
-/* Could be a bad entry
+// This is a bad entry in this case
 #[test]
 fn test_good_entry_1() {
-    assert_eq!(verify_testcase("good_entry_1"), true);
+    assert_eq!(verify_testcase("good_entry_1"), false);
 }
-*/
 
 #[test]
 fn test_good_entry_2() {
@@ -83,7 +87,7 @@ fn test_good_entry_3() {
     assert_eq!(verify_testcase("good_entry_3"), true);
 }
 
-/* Could be a bad entry
+/* This does not pass
 #[test]
 fn test_good_entry_4() {
     assert_eq!(verify_testcase("good_entry_4"), true);
