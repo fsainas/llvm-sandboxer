@@ -23,7 +23,7 @@ extern crate llvm_sys as llvm;
 use regex::Regex;
 
 // Instruction opcodes
-use inkwell::values::InstructionOpcode::{Call, Load, Store, Phi, Br};
+use inkwell::values::InstructionOpcode::{Call, Load, Store, Phi, Br, Alloca};
 
 use crate::static_checks;
 
@@ -496,12 +496,18 @@ pub fn instrument<'a>(
     let zero_offset = i64_type.const_int(0, false);
     protected_offset.set_initializer(&zero_offset);
 
+    // Stack values
+    let stack_values: Vec<PointerValue> = Vec::new();
+
     // * Internal state for static analysis * //
     let mut protected_mem_static: (Option<PointerValue>, Option<u64>) = (None, None);
 
     // Count the number of load and store instructions, to give names to blocks later
     let mut load_counter: u32 = 0;
     let mut store_counter: u32 = 0;
+
+    // Count the number of stack allocations instructions
+    let mut alloca_counter: u32 = 0;
 
     // Count the number of updated phi instructions, to give names later
     let mut phi_counter: u32 = 0;
@@ -555,6 +561,11 @@ pub fn instrument<'a>(
 
                 Load => {
 
+                    // If it's stack skip
+                    if instr.print_to_string().to_string().contains("stack") {
+                        continue;
+                    }
+
                     // Create the block to store the rest of the code
                     let new_bb_name = format!("load{}", load_counter);
                     load_counter += 1;
@@ -590,6 +601,11 @@ pub fn instrument<'a>(
 
                 Store => {
 
+                    // If it's stack skip
+                    if instr.print_to_string().to_string().contains("stack") {
+                        continue;
+                    }
+
                     // Create the block to store the rest of the code
                     let new_bb_name: String = format!("store{}", store_counter);
                     store_counter += 1;
@@ -621,6 +637,11 @@ pub fn instrument<'a>(
                         &mut current_block_name, 
                         &mut phi_counter)?;
 
+                }
+
+                Alloca => {
+                    instr.set_name(&format!("stack_{}", alloca_counter));
+                    alloca_counter += 1;
                 }
 
                 _ => {}
