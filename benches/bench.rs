@@ -143,5 +143,43 @@ fn benchmark_1_instrumented(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, benchmark_0, benchmark_0_instrumented, benchmark_1, benchmark_1_instrumented);
+fn benchmark_2(c: &mut Criterion) {
+
+    let test_case_name = "benchmark_2";
+
+    let exec_path = format!("target/bench/no_utx/{}.o", test_case_name);
+    let exec_path = Path::new(&exec_path);
+
+    // Compile if it not exists
+    if !exec_path.exists() {
+        compile_c_files();
+    }
+
+    c.bench_function("benchmark_2", |b| {
+        b.iter(|| {
+            let _ = Command::new(exec_path)
+                .output()
+                .expect(&format!("Cannot execute {}.", exec_path.display()));
+        });
+    });
+}
+
+fn benchmark_2_instrumented(c: &mut Criterion) {
+    let test_case_name = "benchmark_2";
+
+    let ll_filepath = instrument_test_case(test_case_name);
+    let exec_path = compile_ll_to_exec(&ll_filepath);
+    let exec_path = Path::new(&exec_path);
+
+    c.bench_function("instrumented_benchmark_2", |b| {
+        b.iter(|| {
+            let _ = Command::new(exec_path)
+                .output()
+                .expect(&format!("Cannot execute {}.", exec_path.display()));
+        });
+    });
+}
+
+criterion_group!(benches, benchmark_0, benchmark_0_instrumented, benchmark_1,
+benchmark_1_instrumented, benchmark_2, benchmark_2_instrumented);
 criterion_main!(benches);
