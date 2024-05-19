@@ -12,9 +12,9 @@ static uint64_t shared_array[100];
 void good_entry_7(uint64_t index)
 {
 	utx1(&shared_array[index], sizeof(&shared_array[index]));
-	if (index < 100) {
-		shared_array[index] += 1;
-	}
+	//if (index < 100) {
+	shared_array[index] += 1;
+	//}
 }
 
 int main()
