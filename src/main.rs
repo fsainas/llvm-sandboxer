@@ -9,9 +9,15 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     // Check if the expected number of arguments are provided
-    if args.len() != 3 {
+    if args.len() < 3 {
         eprintln!("Usage: {} <file_path> <function_to_check>", args[0]);
         std::process::exit(1);
+    }
+
+    let mut run_static_analysis = false;
+
+    if args.contains(&String::from("-s")) {
+        run_static_analysis = true;
     }
 
     // Get the file path
@@ -25,10 +31,12 @@ fn main() {
     // Parse LLVM
     let module = Module::parse_bitcode_from_path(path, &context).unwrap();
 
-    match runtime::instrument(function_name, &context, &module, true) {
+    match runtime::instrument(function_name, &context, &module, run_static_analysis) {
         Ok(()) => println!("Instrumentation completed successfully"),
         Err(err) => println!("Error occurred: {:?}", err)
     }
+
+    module.print_to_file("out.ll");
 
     match module.verify() {
         Ok(()) => (),
