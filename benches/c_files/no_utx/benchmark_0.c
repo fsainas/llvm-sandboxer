@@ -34,10 +34,7 @@ uint64_t benchmark_0()
 
 int main()
 {
-    uint64_t sum = 0;
-    for (int i = 0; i < 100; i++) {
-        sum += benchmark_0();
-    }
+    uint64_t sum = benchmark_0();
     printf("Sum: %lu\n", sum);
 	return 0;
 }
