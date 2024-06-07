@@ -19,3 +19,6 @@ Cargo.lock
 *.bc
 
 .vscode/
+
+# Benchmark file
+perf.data
