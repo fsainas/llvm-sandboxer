@@ -10,7 +10,7 @@ void utx1(void *addr, size_t len);
 
 static uint64_t shared_array[ARR_LENGTH];
 
-void benchmark_1() 
+void bubble_sort() 
 {
 
 	utx1(&shared_array, sizeof (shared_array));
@@ -40,10 +40,10 @@ int main()
         //printf("%lu ", shared_array[i]);
     }
 
-    benchmark_1();
+    bubble_sort();
 
     for (int i = 0; i < ARR_LENGTH; i++) {
-        //printf("%lu ", shared_array[i]);
+        printf("%lu ", shared_array[i]);
     }
 	return 0;
 }

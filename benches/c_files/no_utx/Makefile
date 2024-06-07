@@ -1,6 +1,6 @@
 CC = clang
 
-CFLAGS = -emit-llvm -O2 -fno-inline-functions
+CFLAGS = -O0 -fno-inline-functions
 
 # List of C source files
 SOURCES := $(wildcard *.c)
@@ -14,11 +14,11 @@ LLVMTXT := $(SOURCES:.c=.ll)
 all: $(LLVMTXT) $(SOURCES)
 
 %.o: %.c target_dir 
-	$(CC) -o ../../../target/bench/no_utx/$@ $<
+	$(CC) $(CFLAGS) -o ../../../target/bench/no_utx/$@ $<
 
 # Rule to compile each C source file into LLVM 
 %.ll: %.c target_dir
-	$(CC) $(CFLAGS) -S -o ../../../target/bench/no_utx/$@ $<
+	$(CC) $(CFLAGS) -emit-llvm -S -o ../../../target/bench/no_utx/$@ $<
 
 target_dir:
 	mkdir -p ../../../target/bench/no_utx/

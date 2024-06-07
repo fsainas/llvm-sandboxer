@@ -69,46 +69,9 @@ fn instrument_test_case(test_case_name: &str) -> String {
     return filepath
 }
 
-fn benchmark_0(c: &mut Criterion) {
+fn vec_sum(c: &mut Criterion) {
 
-    let test_case_name = "benchmark_0";
-
-    let exec_path = format!("target/bench/no_utx/{}.o", test_case_name);
-    let exec_path = Path::new(&exec_path);
-
-    // Compile if it not exists
-    if !exec_path.exists() {
-        compile_c_files();
-    }
-
-    c.bench_function("benchmark_0", |b| {
-        b.iter(|| {
-            let _ = Command::new(exec_path)
-                .output()
-                .expect(&format!("Cannot execute {}.", exec_path.display()));
-        });
-    });
-}
-
-fn benchmark_0_instrumented(c: &mut Criterion) {
-    let test_case_name = "benchmark_0";
-
-    let ll_filepath = instrument_test_case(test_case_name);
-    let exec_path = compile_ll_to_exec(&ll_filepath);
-    let exec_path = Path::new(&exec_path);
-
-    c.bench_function("instrumented_benchmark_0", |b| {
-        b.iter(|| {
-            let _ = Command::new(exec_path)
-                .output()
-                .expect(&format!("Cannot execute {}.", exec_path.display()));
-        });
-    });
-}
-
-fn benchmark_1(c: &mut Criterion) {
-
-    let test_case_name = "benchmark_1";
+    let test_case_name = "vec_sum";
 
     let exec_path = format!("target/bench/no_utx/{}.o", test_case_name);
     let exec_path = Path::new(&exec_path);
@@ -118,7 +81,7 @@ fn benchmark_1(c: &mut Criterion) {
         compile_c_files();
     }
 
-    c.bench_function("benchmark_1", |b| {
+    c.bench_function("vec_sum", |b| {
         b.iter(|| {
             let _ = Command::new(exec_path)
                 .output()
@@ -127,14 +90,14 @@ fn benchmark_1(c: &mut Criterion) {
     });
 }
 
-fn benchmark_1_instrumented(c: &mut Criterion) {
-    let test_case_name = "benchmark_1";
+fn vec_sum_instrumented(c: &mut Criterion) {
+    let test_case_name = "vec_sum";
 
     let ll_filepath = instrument_test_case(test_case_name);
     let exec_path = compile_ll_to_exec(&ll_filepath);
     let exec_path = Path::new(&exec_path);
 
-    c.bench_function("instrumented_benchmark_1", |b| {
+    c.bench_function("instrumented_vec_sum", |b| {
         b.iter(|| {
             let _ = Command::new(exec_path)
                 .output()
@@ -143,9 +106,9 @@ fn benchmark_1_instrumented(c: &mut Criterion) {
     });
 }
 
-fn benchmark_2(c: &mut Criterion) {
+fn bubble_sort(c: &mut Criterion) {
 
-    let test_case_name = "benchmark_2";
+    let test_case_name = "bubble_sort";
 
     let exec_path = format!("target/bench/no_utx/{}.o", test_case_name);
     let exec_path = Path::new(&exec_path);
@@ -155,7 +118,7 @@ fn benchmark_2(c: &mut Criterion) {
         compile_c_files();
     }
 
-    c.bench_function("benchmark_2", |b| {
+    c.bench_function("bubble_sort", |b| {
         b.iter(|| {
             let _ = Command::new(exec_path)
                 .output()
@@ -164,14 +127,14 @@ fn benchmark_2(c: &mut Criterion) {
     });
 }
 
-fn benchmark_2_instrumented(c: &mut Criterion) {
-    let test_case_name = "benchmark_2";
+fn bubble_sort_instrumented(c: &mut Criterion) {
+    let test_case_name = "bubble_sort";
 
     let ll_filepath = instrument_test_case(test_case_name);
     let exec_path = compile_ll_to_exec(&ll_filepath);
     let exec_path = Path::new(&exec_path);
 
-    c.bench_function("instrumented_benchmark_2", |b| {
+    c.bench_function("instrumented_bubble_sort", |b| {
         b.iter(|| {
             let _ = Command::new(exec_path)
                 .output()
@@ -180,6 +143,80 @@ fn benchmark_2_instrumented(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, benchmark_0, benchmark_0_instrumented, benchmark_1,
-benchmark_1_instrumented, benchmark_2, benchmark_2_instrumented);
+fn simple_store(c: &mut Criterion) {
+
+    let test_case_name = "simple_store";
+
+    let exec_path = format!("target/bench/no_utx/{}.o", test_case_name);
+    let exec_path = Path::new(&exec_path);
+
+    // Compile if it not exists
+    if !exec_path.exists() {
+        compile_c_files();
+    }
+
+    c.bench_function("simple_store", |b| {
+        b.iter(|| {
+            let _ = Command::new(exec_path)
+                .output()
+                .expect(&format!("Cannot execute {}.", exec_path.display()));
+        });
+    });
+}
+
+fn simple_store_instrumented(c: &mut Criterion) {
+    let test_case_name = "simple_store";
+
+    let ll_filepath = instrument_test_case(test_case_name);
+    let exec_path = compile_ll_to_exec(&ll_filepath);
+    let exec_path = Path::new(&exec_path);
+
+    c.bench_function("instrumented_simple_store", |b| {
+        b.iter(|| {
+            let _ = Command::new(exec_path)
+                .output()
+                .expect(&format!("Cannot execute {}.", exec_path.display()));
+        });
+    });
+}
+
+fn matrix_mul(c: &mut Criterion) {
+
+    let test_case_name = "matrix_mul";
+
+    let exec_path = format!("target/bench/no_utx/{}.o", test_case_name);
+    let exec_path = Path::new(&exec_path);
+
+    // Compile if it not exists
+    if !exec_path.exists() {
+        compile_c_files();
+    }
+
+    c.bench_function("matrix_mul", |b| {
+        b.iter(|| {
+            let _ = Command::new(exec_path)
+                .output()
+                .expect(&format!("Cannot execute {}.", exec_path.display()));
+        });
+    });
+}
+
+fn matrix_mul_instrumented(c: &mut Criterion) {
+    let test_case_name = "matrix_mul";
+
+    let ll_filepath = instrument_test_case(test_case_name);
+    let exec_path = compile_ll_to_exec(&ll_filepath);
+    let exec_path = Path::new(&exec_path);
+
+    c.bench_function("instrumented_matrix_mul", |b| {
+        b.iter(|| {
+            let _ = Command::new(exec_path)
+                .output()
+                .expect(&format!("Cannot execute {}.", exec_path.display()));
+        });
+    });
+}
+
+criterion_group!(benches, /*vec_sum, vec_sum_instrumented, bubble_sort,
+bubble_sort_instrumented, simple_store, simple_store_instrumented,*/ matrix_mul, matrix_mul_instrumented);
 criterion_main!(benches);

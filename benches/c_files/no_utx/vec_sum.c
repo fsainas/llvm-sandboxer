@@ -12,10 +12,8 @@ void utx1(void *addr, size_t len);
 static uint64_t shared_array[ARR_LENGTH];
 
 
-uint64_t benchmark_0()
+uint64_t vec_sum()
 {
-
-	utx1(&shared_array, sizeof (shared_array));
 
     srand(time(NULL));
 
@@ -36,7 +34,7 @@ uint64_t benchmark_0()
 
 int main()
 {
-    uint64_t sum = benchmark_0();
+    uint64_t sum = vec_sum();
     printf("Sum: %lu\n", sum);
 	return 0;
 }

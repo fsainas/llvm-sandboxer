@@ -10,13 +10,13 @@ void utx1(void *addr, size_t len);
 
 static uint64_t shared_array[ARR_LENGTH];
 
-void benchmark_2()
+void simple_store()
 {
     srand(time(NULL));
 
     for (int i = 0; i < ARR_LENGTH; i++) {
-        int index = rand() % ARR_LENGTH;
-        shared_array[index] = rand();
+        //int index = rand() % ARR_LENGTH;
+        shared_array[i] = rand();
     }
 
 }
@@ -24,6 +24,6 @@ void benchmark_2()
 int main()
 {
 
-    benchmark_2();
+    simple_store();
 	return 0;
 }
